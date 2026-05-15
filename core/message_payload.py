@@ -1,8 +1,7 @@
-"""Serializacja wiadomości czatu (WebSocket + HTTP upload)."""
-
 import mimetypes
 from pathlib import Path
 
+from .media_utils import filefield_url_if_exists
 from .models import Message
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif"}
@@ -41,18 +40,17 @@ def classify_attachment_kind(filename: str) -> str:
 def build_message_payload(msg: Message) -> dict:
     msg = Message.objects.select_related("author").get(pk=msg.pk)
     author = msg.author
-    avatar_url = ""
-    if getattr(author, "avatar", None) and author.avatar:
-        avatar_url = author.avatar.url
+    avatar_url = filefield_url_if_exists(getattr(author, "avatar", None))
 
     att_url = ""
     att_kind = "none"
     att_mime = ""
-    if msg.attachment:
-        att_url = msg.attachment.url
-        att_mime, _ = mimetypes.guess_type(msg.attachment.name)
-        att_mime = att_mime or ""
-        att_kind = classify_attachment_kind(msg.attachment.name)
+    if msg.attachment and (getattr(msg.attachment, "name", None) or ""):
+        att_url = filefield_url_if_exists(msg.attachment)
+        if att_url:
+            att_mime, _ = mimetypes.guess_type(msg.attachment.name)
+            att_mime = att_mime or ""
+            att_kind = classify_attachment_kind(msg.attachment.name)
 
     return {
         "id": msg.id,

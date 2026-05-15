@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load media_extras %}
 {% block title %}DM: {{ other.username }} — discord_clone{% endblock %}
 {% block extra_css %}
 <style>
@@ -67,13 +68,19 @@
                 <p class="dm-bubble-text">{{ m.content }}</p>
               {% endif %}
               {% if m.attachment %}
-                {% if m.attachment_display_kind == "image" %}
-                  <img src="{{ m.attachment.url }}" alt="" class="dm-attach-img rounded mt-1" loading="lazy">
-                {% elif m.attachment_display_kind == "audio" %}
-                  <audio class="d-block mt-1" style="max-width: 100%; min-width: 12rem;" controls src="{{ m.attachment.url }}"></audio>
+                {% with att_url=m.attachment|file_url %}
+                {% if att_url %}
+                  {% if m.attachment_display_kind == "image" %}
+                    <img src="{{ att_url }}" alt="" class="dm-attach-img rounded mt-1" loading="lazy">
+                  {% elif m.attachment_display_kind == "audio" %}
+                    <audio class="d-block mt-1" style="max-width: 100%; min-width: 12rem;" controls src="{{ att_url }}"></audio>
+                  {% else %}
+                    <a href="{{ att_url }}" class="link-light small d-inline-block mt-1" target="_blank" rel="noopener">Załącznik</a>
+                  {% endif %}
                 {% else %}
-                  <a href="{{ m.attachment.url }}" class="link-light small d-inline-block mt-1" target="_blank" rel="noopener">Załącznik</a>
+                  <p class="small text-white-50 mt-1 mb-0">Załącznik niedostępny (brak pliku na serwerze).</p>
                 {% endif %}
+                {% endwith %}
               {% endif %}
             </div>
           </div>

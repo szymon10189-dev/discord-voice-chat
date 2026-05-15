@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load media_extras %}
 {% block title %}Edycja profilu — discord_clone{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -6,12 +7,16 @@
     <div class="card card-discord">
       <div class="card-header py-3">Twój profil</div>
       <div class="card-body p-4">
-        {% if user.avatar %}
+        {% with av_preview=user.avatar|file_url %}
+        {% if av_preview %}
           <div class="text-center mb-4">
-            <img src="{{ user.avatar.url }}" alt="Avatar" class="rounded-circle border border-secondary"
+            <img src="{{ av_preview }}" alt="Avatar" class="rounded-circle border border-secondary"
                  style="width: 96px; height: 96px; object-fit: cover;">
           </div>
+        {% elif user.avatar %}
+          <p class="small text-secondary text-center mb-4">Zapisany avatar nie jest dostępny na serwerze — wgraj plik ponownie.</p>
         {% endif %}
+        {% endwith %}
         <form method="post" enctype="multipart/form-data" action="" novalidate>
           {% csrf_token %}
           {% for field in form %}
