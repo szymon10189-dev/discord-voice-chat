@@ -1,5 +1,4 @@
-# Blueprint Render.com — dostosuj nazwę serwisu i dodaj Redis (zalecane dla Channels).
-# Dokumentacja: https://render.com/docs/blueprint-spec
+# Lekki blueprint: tylko Web Service + SQLite (bez PostgreSQL, bez Redis).
 services:
   - type: web
     name: discord-clone
@@ -10,8 +9,7 @@ services:
     envVars:
       - key: DEBUG
         value: "False"
-      - key: DJANGO_ALLOWED_HOSTS
-        sync: false
       - key: SECRET_KEY
         generateValue: true
-      # Ustaw w panelu: DATABASE_URL (PostgreSQL), opcjonalnie REDIS_URL (Channels).
+      # Po pierwszym deployu ustaw w panelu (jeśli auto-host nie wystarczy):
+      # DJANGO_ALLOWED_HOSTS = twoja-app.onrender.com

@@ -1,14 +1,12 @@
 """
 Ustawienia Django dla discord_clone.
 
-Produkcja (np. Render): ustaw zmienne środowiskowe SECRET_KEY, DEBUG=False,
-DJANGO_ALLOWED_HOSTS, DATABASE_URL, opcjonalnie REDIS_URL, CSRF_TRUSTED_ORIGINS.
+Render (lekki wariant studencki): SECRET_KEY, DEBUG=False, opcjonalnie
+DJANGO_ALLOWED_HOSTS. Baza: SQLite (bez PostgreSQL). WebSockety: InMemory (bez Redis).
 """
 
 import os
 from pathlib import Path
-
-import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -98,36 +96,20 @@ TEMPLATES = [
 WSGI_APPLICATION = "discord_clone.wsgi.application"
 ASGI_APPLICATION = "discord_clone.asgi.application"
 
-_redis_url = (
-    os.environ.get("REDIS_URL")
-    or os.environ.get("REDISCLOUD_URL")
-    or os.environ.get("RENDER_REDIS_URL")
-    or ""
-).strip()
-if _redis_url:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [_redis_url],
-            },
-        },
-    }
-else:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer",
-        },
-    }
+# Czat na żywo — jeden proces (Render free): InMemory wystarczy na projekt studencki.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
 
 
-# --- Baza danych ---
+# --- Baza danych (SQLite) ---
 DATABASES = {
-    "default": dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
-        ssl_require=bool(os.environ.get("DATABASE_URL")) and not DEBUG,
-    ),
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    },
 }
 
 
