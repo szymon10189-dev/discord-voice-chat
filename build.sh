@@ -10,6 +10,7 @@ python -m pip install -r requirements.txt
 
 python manage.py collectstatic --no-input
 python manage.py migrate --no-input
+python manage.py shell -c "from core.bootstrap import bootstrap_defaults; bootstrap_defaults()"
 if [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ] && [ -n "${DJANGO_SUPERUSER_PASSWORD:-}" ]; then
   export DJANGO_SUPERUSER_EMAIL="${DJANGO_SUPERUSER_EMAIL:-admin@example.com}"
   python manage.py createsuperuser --noinput || true

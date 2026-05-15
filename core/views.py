@@ -412,10 +412,13 @@ class RegisterView(FormView):
     success_url = reverse_lazy("core:login")
 
     def form_valid(self, form):
-        form.save()
+        user = form.save()
+        from .bootstrap import add_user_to_default_server
+
+        add_user_to_default_server(user)
         messages.success(
             self.request,
-            "Konto zostało utworzone. Możesz się teraz zalogować.",
+            "Konto zostało utworzone. Po zalogowaniu zobaczysz domyślny serwer i kanał #ogólny.",
         )
         return super().form_valid(form)
 
