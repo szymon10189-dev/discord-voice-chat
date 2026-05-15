@@ -1,5 +1,32 @@
 {% extends "base.html" %}
 {% block title %}DM: {{ other.username }} — discord_clone{% endblock %}
+{% block extra_css %}
+<style>
+  .dm-msg-row { width: 100%; }
+  .dm-msg-stack {
+    max-width: min(28rem, 82vw);
+    width: fit-content;
+  }
+  .dm-msg-stack.dm-own { margin-left: auto; }
+  .dm-bubble {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.45rem 0.75rem;
+    text-align: left;
+  }
+  .dm-bubble-text {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+  .dm-bubble .dm-attach-img {
+    max-height: 240px;
+    max-width: 100%;
+    display: block;
+  }
+</style>
+{% endblock %}
 {% block content_wrapper %}container-fluid px-0{% endblock %}
 {% block main_class %}py-0{% endblock %}
 {% block content %}
@@ -22,62 +49,58 @@
   </aside>
 
   <section class="col-12 col-md-8 col-lg-9 d-flex flex-column bg-body-secondary">
-    <header class="px-4 py-3 border-bottom border-secondary bg-dark d-flex align-items-center justify-content-between">
-      <div>
-        <span class="text-secondary small">Rozmowa z</span>
-        <h1 class="h5 mb-0 fw-semibold">@{{ other.username }}</h1>
-      </div>
+    <header class="px-4 py-3 border-bottom border-secondary bg-dark">
+      <span class="text-secondary small">Rozmowa z</span>
+      <h1 class="h5 mb-0 fw-semibold">@{{ other.username }}</h1>
     </header>
 
-    <div class="flex-grow-1 overflow-auto px-4 py-3" id="dm-scroll">
+    <div class="flex-grow-1 overflow-auto px-3 py-3" id="dm-scroll">
       {% for m in messages %}
-        <div class="d-flex mb-3 {% if m.author_id == user.id %}justify-content-end{% endif %}">
-          <div class="{% if m.author_id == user.id %}text-end{% endif %}" style="max-width: 85%;">
-            <div class="small text-secondary mb-1">
-              {% if m.author_id == user.id %}Ty{% else %}{{ m.author.username }}{% endif %}
+        {% with own=m.author_id == user.id %}
+        <div class="dm-msg-row d-flex mb-2 {% if own %}justify-content-end{% else %}justify-content-start{% endif %}">
+          <div class="dm-msg-stack {% if own %}dm-own text-end{% endif %}">
+            <div class="small text-secondary mb-1 px-1">
+              {% if own %}Ty{% else %}{{ m.author.username }}{% endif %}
               · {{ m.created_at|date:"d.m.Y H:i" }}
             </div>
-            <div class="rounded-3 px-3 py-2 {% if m.author_id == user.id %}bg-primary text-white{% else %}bg-dark border border-secondary{% endif %}">
+            <div class="dm-bubble rounded-3 {% if own %}bg-primary text-white{% else %}bg-dark border border-secondary text-light{% endif %}">
               {% if m.content %}
-                <div class="text-break" style="white-space: pre-wrap;">{{ m.content }}</div>
+                <p class="dm-bubble-text">{{ m.content }}</p>
               {% endif %}
               {% if m.attachment %}
                 {% if m.attachment_display_kind == "image" %}
-                  <div class="mt-2">
-                    <img src="{{ m.attachment.url }}" alt="" class="img-fluid rounded" style="max-height: 280px;" loading="lazy">
-                  </div>
+                  <img src="{{ m.attachment.url }}" alt="" class="dm-attach-img rounded mt-1" loading="lazy">
                 {% elif m.attachment_display_kind == "audio" %}
-                  <div class="mt-2">
-                    <audio class="w-100" controls src="{{ m.attachment.url }}"></audio>
-                  </div>
+                  <audio class="d-block mt-1" style="max-width: 100%; min-width: 12rem;" controls src="{{ m.attachment.url }}"></audio>
                 {% else %}
-                  <a href="{{ m.attachment.url }}" class="link-light small" target="_blank" rel="noopener">Załącznik</a>
+                  <a href="{{ m.attachment.url }}" class="{% if own %}link-light{% else %}link-light{% endif %} small d-inline-block mt-1" target="_blank" rel="noopener">Załącznik</a>
                 {% endif %}
               {% endif %}
             </div>
           </div>
         </div>
+        {% endwith %}
       {% empty %}
-        <p class="text-secondary">Brak wiadomości — napisz coś poniżej.</p>
+        <p class="text-secondary px-2">Brak wiadomości — napisz coś poniżej.</p>
       {% endfor %}
     </div>
 
-    <footer class="px-4 py-3 border-top border-secondary bg-dark mt-auto">
-      <form method="post" enctype="multipart/form-data" action="" class="row g-2">
+    <footer class="px-3 py-3 border-top border-secondary bg-dark mt-auto">
+      <form method="post" enctype="multipart/form-data" action="" class="row g-2 align-items-end">
         {% csrf_token %}
-        <div class="col-12 col-lg">
+        <div class="col">
           <label class="form-label small text-secondary mb-1" for="{{ form.content.id_for_label }}">Treść</label>
           {{ form.content }}
           {% if form.content.errors %}
             <div class="small text-danger">{{ form.content.errors|striptags }}</div>
           {% endif %}
         </div>
-        <div class="col-12 col-lg-4">
+        <div class="col-auto col-md-4">
           <label class="form-label small text-secondary mb-1" for="{{ form.attachment.id_for_label }}">Plik</label>
           {{ form.attachment }}
         </div>
-        <div class="col-12 col-lg-auto d-flex align-items-end">
-          <button type="submit" class="btn btn-discord-primary w-100">Wyślij</button>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-discord-primary">Wyślij</button>
         </div>
       </form>
       {% if form.non_field_errors %}

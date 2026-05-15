@@ -126,7 +126,7 @@ class DirectMessageForm(forms.ModelForm):
         self.fields["content"].required = False
         self.fields["attachment"].required = False
         _discord_input(self.fields["content"].widget)
-        self.fields["content"].widget.attrs.setdefault("rows", 3)
+        self.fields["content"].widget.attrs.setdefault("rows", 2)
         self.fields["attachment"].widget.attrs.setdefault(
             "class",
             "form-control form-control-sm bg-dark text-light border-secondary",

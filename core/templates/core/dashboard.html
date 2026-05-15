@@ -129,7 +129,7 @@
           </div>
         </div>
         <div id="chat-recording-hint" class="small text-danger mt-1 d-none">Nagrywanie… kliknij mikrofon ponownie, aby zatrzymać.</div>
-        <div id="chat-ws-error" class="small text-danger mt-2" role="alert"></div>
+        <div id="chat-ws-error" class="small text-danger mt-2 d-none" role="alert"></div>
       </footer>
     {% else %}
       <div class="flex-grow-1 d-flex align-items-center justify-content-center text-secondary px-3">
@@ -185,8 +185,25 @@
     scrollEl.scrollTop = scrollEl.scrollHeight;
   }
 
+  var channelErrorTimer = null;
+
   function clearError() {
-    if (errorEl) errorEl.textContent = "";
+    if (channelErrorTimer) {
+      clearTimeout(channelErrorTimer);
+      channelErrorTimer = null;
+    }
+    if (errorEl) {
+      errorEl.textContent = "";
+      errorEl.classList.add("d-none");
+    }
+  }
+
+  function showChannelError(msg) {
+    if (!errorEl) return;
+    if (channelErrorTimer) clearTimeout(channelErrorTimer);
+    errorEl.textContent = msg;
+    errorEl.classList.remove("d-none");
+    channelErrorTimer = setTimeout(clearError, 6000);
   }
 
   function setStatus(text, ok) {
@@ -361,7 +378,7 @@
         });
       })
       .catch(function (err) {
-        if (errorEl) errorEl.textContent = err.message || "Błąd operacji moderacji.";
+        showChannelError(err.message || "Błąd operacji moderacji.");
         return Promise.reject(err);
       });
   }
@@ -388,7 +405,7 @@
         });
       })
       .catch(function (err) {
-        if (errorEl) errorEl.textContent = err.message || "Błąd przesyłania pliku.";
+        showChannelError(err.message || "Błąd przesyłania pliku.");
         return Promise.reject(err);
       });
   }
@@ -427,7 +444,7 @@
   if (micBtn) {
     micBtn.addEventListener("click", function () {
       if (!window.MediaRecorder) {
-        if (errorEl) errorEl.textContent = "Ta przeglądarka nie obsługuje nagrywania (MediaRecorder).";
+        showChannelError("Ta przeglądarka nie obsługuje nagrywania (MediaRecorder).");
         return;
       }
       if (mediaRecorder && mediaRecorder.state === "recording") {
@@ -456,7 +473,7 @@
           var blob = new Blob(mediaChunks, { type: blobType });
           mediaChunks = [];
           if (!blob.size) {
-            if (errorEl) errorEl.textContent = "Puste nagranie — spróbuj ponownie.";
+            showChannelError("Puste nagranie — spróbuj ponownie.");
             return;
           }
           var ext = blobType.indexOf("wav") !== -1 ? "wav" : "webm";
@@ -468,7 +485,7 @@
         startMicVisual();
       }).catch(function () {
         stopMicVisual();
-        if (errorEl) errorEl.textContent = "Nie udało się uzyskać dostępu do mikrofonu.";
+        showChannelError("Nie udało się uzyskać dostępu do mikrofonu.");
       });
     });
   }
@@ -503,13 +520,13 @@
     } else if (data.type === "message_deleted" && data.message_id != null) {
       removeMessageRow(data.message_id);
     } else if (data.type === "error") {
-      if (errorEl) errorEl.textContent = data.message || "Błąd";
+      showChannelError(data.message || "Błąd");
     }
   };
 
   function sendChat() {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      if (errorEl) errorEl.textContent = "Brak połączenia z serwerem.";
+      showChannelError("Brak połączenia z serwerem.");
       return;
     }
     var text = (inputEl && inputEl.value) ? inputEl.value.trim() : "";
