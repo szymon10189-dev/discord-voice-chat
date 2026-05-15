@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+{% block title %}{{ server.name }} — dashboard{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  .chat-attachment-img { max-width: 100%; }
+  #chat-mic-btn.recording {
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.45);
+    color: #fff !important;
+  }
+</style>
+{% endblock %}
+{% block content_wrapper %}container-fluid px-0{% endblock %}
+{% block main_class %}py-0{% endblock %}
+{% block content %}
+<div class="row g-0 dashboard-row text-light">
+  <aside class="col-12 col-md-4 col-lg-3 col-xl-2 bg-dark border-end border-secondary d-flex flex-column"
+         style="min-height: calc(100vh - 120px);">
+    <div class="p-3 border-bottom border-secondary">
+      <div class="fw-bold text-truncate">{{ server.name }}</div>
+      <div class="small text-secondary text-uppercase mt-2 mb-1" style="letter-spacing: 0.06em;">Kanały tekstowe</div>
+    </div>
+    <nav class="nav flex-column px-2 py-2 flex-grow-1 overflow-auto">
+      {% for ch in channels %}
+        <a class="nav-link rounded-2 py-2 px-2 mb-1 {% if active_channel and ch.id == active_channel.id %}active bg-secondary text-white{% else %}text-secondary{% endif %}"
+           href="{% url 'core:dashboard_channel' server.id ch.id %}">
+          <span class="text-secondary">#</span> {{ ch.name }}
+        </a>
+      {% empty %}
+        <p class="small text-secondary px-2 mb-0">Brak kanałów.</p>
+      {% endfor %}
+    </nav>
+    {% if is_server_admin and channel_form %}
+      <div class="p-3 border-top border-secondary mt-auto bg-black bg-opacity-25">
+        <div class="small text-secondary text-uppercase mb-2" style="letter-spacing: 0.06em;">Nowy kanał</div>
+        <form method="post" action="" class="d-grid gap-2">
+          {% csrf_token %}
+          {{ channel_form.name }}
+          {% if channel_form.name.errors %}
+            <div class="small text-danger">{{ channel_form.name.errors|striptags }}</div>
+          {% endif %}
+          <button type="submit" name="create_channel" value="1" class="btn btn-sm btn-primary">Utwórz kanał</button>
+        </form>
+      </div>
+    {% endif %}
+  </aside>
+
+  <section class="col-12 col-md-8 col-lg-9 col-xl-10 d-flex flex-column bg-body-secondary"
+           style="min-height: calc(100vh - 120px);">
+    {% if active_channel %}
+      <header class="px-4 py-3 border-bottom border-secondary shadow-sm d-flex align-items-center justify-content-between bg-dark">
+        <div class="d-flex align-items-center">
+          <span class="text-secondary me-2">#</span>
+          <h1 class="h5 mb-0 fw-semibold">{{ active_channel.name }}</h1>
+        </div>
+        <span id="chat-ws-status" class="small text-secondary">Łączenie…</span>
+      </header>
+
+      <div class="flex-grow-1 overflow-auto px-4 py-3" id="chat-scroll">
+        {% for m in messages %}
+          <div class="d-flex mb-3 chat-message-row w-100 align-items-start" data-message-id="{{ m.id }}" data-author-id="{{ m.author_id }}">
+            <div class="flex-shrink-0 me-3">
+              {% if m.author.avatar %}
+                <img src="{{ m.author.avatar.url }}" alt="" class="rounded-circle" width="40" height="40" style="object-fit: cover;">
+              {% else %}
+                <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-uppercase fw-bold"
+                     style="width: 40px; height: 40px; font-size: 0.85rem;">
+                  {{ m.author.username|slice:":1" }}
+                </div>
+              {% endif %}
+            </div>
+            <div class="flex-grow-1 min-w-0">
+              <div class="d-flex align-items-baseline gap-2 flex-wrap">
+                <span class="fw-semibold">{{ m.author.username }}</span>
+                <time class="small text-secondary" datetime="{{ m.created_at|date:'c' }}">{{ m.created_at|date:"d.m.Y H:i" }}</time>
+              </div>
+              {% if m.content %}
+                <div class="text-break mt-1 chat-message-content">{{ m.content|linebreaksbr }}</div>
+              {% endif %}
+              {% if m.attachment %}
+                {% if m.attachment_display_kind == "image" %}
+                  <div class="mt-2">
+                    <img src="{{ m.attachment.url }}" alt="Załącznik graficzny" class="img-fluid rounded chat-attachment-img" style="max-height: 360px;" loading="lazy">
+                  </div>
+                {% elif m.attachment_display_kind == "audio" %}
+                  <div class="mt-2">
+                    <audio class="w-100" controls preload="metadata" src="{{ m.attachment.url }}"></audio>
+                  </div>
+                {% else %}
+                  <div class="mt-2">
+                    <a href="{{ m.attachment.url }}" class="link-light small" target="_blank" rel="noopener">Pobierz załącznik</a>
+                  </div>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% if can_moderate %}
+              <div class="flex-shrink-0 ms-2 d-flex flex-column gap-1 moderation-tools" style="min-width: 5.5rem;">
+                <button type="button" class="btn btn-sm btn-outline-danger btn-msg-delete">Usuń</button>
+                {% if m.author_id != request.user.id and m.author_id != server.owner_id %}
+                  <button type="button" class="btn btn-sm btn-outline-warning btn-msg-block">Zablokuj</button>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        {% empty %}
+          <p class="text-secondary mb-0" id="chat-empty-hint">Brak wiadomości — napisz coś poniżej.</p>
+        {% endfor %}
+      </div>
+
+      <footer class="px-4 py-3 border-top border-secondary bg-dark mt-auto">
+        <div class="d-none">{% csrf_token %}</div>
+        <input type="file" id="chat-image-input" class="d-none" accept="image/*">
+        <div class="row g-2 align-items-end">
+          <div class="col">
+            <label class="form-label small text-secondary mb-1" for="chat-input">Treść</label>
+            <textarea id="chat-input" class="form-control bg-dark text-light border-secondary" rows="2"
+                      placeholder="Napisz wiadomość… (opcjonalny podpis przy obrazku)" autocomplete="off"></textarea>
+          </div>
+          <div class="col-auto d-flex gap-2 align-items-end pb-1">
+            <button type="button" id="chat-image-btn" class="btn btn-outline-secondary" title="Wyślij obrazek"
+                    aria-label="Wyślij obrazek">
+              <i class="bi bi-image"></i>
+            </button>
+            <button type="button" id="chat-mic-btn" class="btn btn-outline-secondary" title="Nagraj wiadomość głosową"
+                    aria-label="Nagraj wiadomość głosową" aria-pressed="false">
+              <i class="bi bi-mic-fill"></i>
+            </button>
+            <button type="button" id="chat-send" class="btn btn-primary">Wyślij</button>
+          </div>
+        </div>
+        <div id="chat-recording-hint" class="small text-danger mt-1 d-none">Nagrywanie… kliknij mikrofon ponownie, aby zatrzymać.</div>
+        <div id="chat-ws-error" class="small text-danger mt-2" role="alert"></div>
+      </footer>
+    {% else %}
+      <div class="flex-grow-1 d-flex align-items-center justify-content-center text-secondary px-3">
+        <div class="text-center">
+          <p class="mb-2">Na tym serwerze nie ma jeszcze kanałów tekstowych.</p>
+          {% if is_server_admin %}
+            <p class="small mb-0">Jako administrator możesz utworzyć pierwszy kanał w panelu po lewej.</p>
+          {% else %}
+            <p class="small mb-0">Poproś administratora o utworzenie kanału.</p>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block extra_js %}
+{% if active_channel %}
+<script>
+(function () {
+  var channelId = {{ active_channel.id }};
+  var uploadUrl = "{% url 'core:chat_message_upload' active_channel.id %}";
+  var scrollEl = document.getElementById("chat-scroll");
+  var inputEl = document.getElementById("chat-input");
+  var sendBtn = document.getElementById("chat-send");
+  var statusEl = document.getElementById("chat-ws-status");
+  var errorEl = document.getElementById("chat-ws-error");
+  var imageBtn = document.getElementById("chat-image-btn");
+  var imageInput = document.getElementById("chat-image-input");
+  var micBtn = document.getElementById("chat-mic-btn");
+  var recHint = document.getElementById("chat-recording-hint");
+
+  var canModerate = {{ can_moderate|yesno:"true,false" }};
+  var serverOwnerId = {{ server.owner_id }};
+  var currentUserId = {{ request.user.id }};
+  var messageDeleteUrlTpl = "{% url 'core:chat_message_delete' active_channel.id 999999 %}";
+  function messageDeleteUrl(mid) {
+    return messageDeleteUrlTpl.replace("999999", String(mid));
+  }
+  var blockUserUrlTpl = "{% url 'core:server_user_block' server.id 999999 %}";
+  function blockUserUrl(uid) {
+    return blockUserUrlTpl.replace("999999", String(uid));
+  }
+  function getCsrfToken() {
+    var m = document.cookie.match(/(^|;) ?csrftoken=([^;]*)(;|$)/);
+    if (m) return decodeURIComponent(m[2]);
+    var inp = document.querySelector("[name=csrfmiddlewaretoken]");
+    return inp ? inp.value : "";
+  }
+
+  function scrollToBottom() {
+    if (!scrollEl) return;
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+  }
+
+  function clearError() {
+    if (errorEl) errorEl.textContent = "";
+  }
+
+  function setStatus(text, ok) {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.classList.toggle("text-success", !!ok);
+    statusEl.classList.toggle("text-danger", ok === false);
+    statusEl.classList.toggle("text-secondary", ok === undefined);
+  }
+
+  function formatTime(iso) {
+    try {
+      var d = new Date(iso);
+      return d.toLocaleString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function appendAttachment(body, m) {
+    var url = m.attachment_url;
+    var kind = m.attachment_kind || (url ? "file" : "none");
+    if (!url || kind === "none") return;
+
+    if (kind === "image") {
+      var wrap = document.createElement("div");
+      wrap.className = "mt-2";
+      var im = document.createElement("img");
+      im.src = url;
+      im.alt = "Załącznik graficzny";
+      im.className = "img-fluid rounded chat-attachment-img";
+      im.style.maxHeight = "360px";
+      im.loading = "lazy";
+      wrap.appendChild(im);
+      body.appendChild(wrap);
+    } else if (kind === "audio") {
+      var w2 = document.createElement("div");
+      w2.className = "mt-2";
+      var aud = document.createElement("audio");
+      aud.controls = true;
+      aud.preload = "metadata";
+      aud.className = "w-100";
+      aud.src = url;
+      w2.appendChild(aud);
+      body.appendChild(w2);
+    } else {
+      var a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.className = "link-light small mt-2 d-inline-block";
+      a.textContent = "Pobierz załącznik";
+      body.appendChild(a);
+    }
+  }
+
+  function appendModerationTools(row, authorId) {
+    if (!canModerate) return;
+    var tools = document.createElement("div");
+    tools.className = "flex-shrink-0 ms-2 d-flex flex-column gap-1 moderation-tools";
+    tools.style.minWidth = "5.5rem";
+
+    var delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "btn btn-sm btn-outline-danger btn-msg-delete";
+    delBtn.textContent = "Usuń";
+    tools.appendChild(delBtn);
+
+    var aid = parseInt(authorId, 10);
+    if (aid && aid !== currentUserId && aid !== serverOwnerId) {
+      var blkBtn = document.createElement("button");
+      blkBtn.type = "button";
+      blkBtn.className = "btn btn-sm btn-outline-warning btn-msg-block";
+      blkBtn.textContent = "Zablokuj";
+      tools.appendChild(blkBtn);
+    }
+    row.appendChild(tools);
+  }
+
+  function removeMessageRow(mid) {
+    if (!scrollEl) return;
+    var el = scrollEl.querySelector('[data-message-id="' + mid + '"]');
+    if (el) el.remove();
+  }
+
+  function appendMessage(m) {
+    if (!scrollEl) return;
+    if (scrollEl.querySelector('[data-message-id="' + m.id + '"]')) return;
+
+    var hint = document.getElementById("chat-empty-hint");
+    if (hint) hint.remove();
+
+    var row = document.createElement("div");
+    row.className = "d-flex mb-3 chat-message-row w-100 align-items-start";
+    row.setAttribute("data-message-id", String(m.id));
+    row.setAttribute("data-author-id", String(m.author_id != null ? m.author_id : ""));
+
+    var avatarCol = document.createElement("div");
+    avatarCol.className = "flex-shrink-0 me-3";
+
+    if (m.author_avatar_url) {
+      var img = document.createElement("img");
+      img.src = m.author_avatar_url;
+      img.alt = "";
+      img.width = 40;
+      img.height = 40;
+      img.className = "rounded-circle";
+      img.style.objectFit = "cover";
+      avatarCol.appendChild(img);
+    } else {
+      var ph = document.createElement("div");
+      ph.className = "rounded-circle bg-secondary d-flex align-items-center justify-content-center text-uppercase fw-bold";
+      ph.style.width = "40px";
+      ph.style.height = "40px";
+      ph.style.fontSize = "0.85rem";
+      ph.textContent = (m.author_username || "?").charAt(0);
+      avatarCol.appendChild(ph);
+    }
+
+    var body = document.createElement("div");
+    body.className = "flex-grow-1 min-w-0";
+
+    var meta = document.createElement("div");
+    meta.className = "d-flex align-items-baseline gap-2 flex-wrap";
+
+    var name = document.createElement("span");
+    name.className = "fw-semibold";
+    name.textContent = m.author_username || "";
+
+    var time = document.createElement("time");
+    time.className = "small text-secondary";
+    time.dateTime = m.created_at || "";
+    time.textContent = formatTime(m.created_at);
+
+    meta.appendChild(name);
+    meta.appendChild(time);
+    body.appendChild(meta);
+
+    if (m.content) {
+      var content = document.createElement("div");
+      content.className = "text-break mt-1 chat-message-content";
+      content.style.whiteSpace = "pre-wrap";
+      content.textContent = m.content;
+      body.appendChild(content);
+    }
+
+    appendAttachment(body, m);
+
+    row.appendChild(avatarCol);
+    row.appendChild(body);
+    appendModerationTools(row, m.author_id);
+    scrollEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function postModeration(url) {
+    clearError();
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": getCsrfToken(),
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      credentials: "same-origin",
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            throw new Error(data.error || "Błąd operacji moderacji.");
+          }
+          return data;
+        });
+      })
+      .catch(function (err) {
+        if (errorEl) errorEl.textContent = err.message || "Błąd operacji moderacji.";
+        return Promise.reject(err);
+      });
+  }
+
+  function uploadAttachment(file, filename) {
+    clearError();
+    var fd = new FormData();
+    fd.append("file", file, filename || file.name || "upload.bin");
+    var cap = (inputEl && inputEl.value) ? inputEl.value.trim() : "";
+    if (cap) fd.append("content", cap);
+
+    return fetch(uploadUrl, {
+      method: "POST",
+      headers: { "X-CSRFToken": getCsrfToken() },
+      body: fd,
+      credentials: "same-origin",
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            throw new Error(data.error || "Błąd przesyłania pliku.");
+          }
+          return data;
+        });
+      })
+      .catch(function (err) {
+        if (errorEl) errorEl.textContent = err.message || "Błąd przesyłania pliku.";
+        return Promise.reject(err);
+      });
+  }
+
+  if (imageBtn && imageInput) {
+    imageBtn.addEventListener("click", function () { imageInput.click(); });
+    imageInput.addEventListener("change", function () {
+      var f = imageInput.files && imageInput.files[0];
+      if (!f) return;
+      uploadAttachment(f, f.name).then(function () { imageInput.value = ""; });
+    });
+  }
+
+  var mediaRecorder = null;
+  var mediaChunks = [];
+  var mediaStream = null;
+
+  function stopMicVisual() {
+    if (micBtn) {
+      micBtn.classList.remove("recording", "btn-danger");
+      micBtn.classList.add("btn-outline-secondary");
+      micBtn.setAttribute("aria-pressed", "false");
+    }
+    if (recHint) recHint.classList.add("d-none");
+  }
+
+  function startMicVisual() {
+    if (micBtn) {
+      micBtn.classList.add("recording", "btn-danger");
+      micBtn.classList.remove("btn-outline-secondary");
+      micBtn.setAttribute("aria-pressed", "true");
+    }
+    if (recHint) recHint.classList.remove("d-none");
+  }
+
+  if (micBtn) {
+    micBtn.addEventListener("click", function () {
+      if (!window.MediaRecorder) {
+        if (errorEl) errorEl.textContent = "Ta przeglądarka nie obsługuje nagrywania (MediaRecorder).";
+        return;
+      }
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        return;
+      }
+      clearError();
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        mediaStream = stream;
+        mediaChunks = [];
+        var options = {};
+        if (MediaRecorder.isTypeSupported("audio/webm")) {
+          options.mimeType = "audio/webm";
+        }
+        mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorder.ondataavailable = function (e) {
+          if (e.data && e.data.size > 0) mediaChunks.push(e.data);
+        };
+        mediaRecorder.onstop = function () {
+          stopMicVisual();
+          if (mediaStream) {
+            mediaStream.getTracks().forEach(function (t) { t.stop(); });
+            mediaStream = null;
+          }
+          var blobType = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
+          var blob = new Blob(mediaChunks, { type: blobType });
+          mediaChunks = [];
+          if (!blob.size) {
+            if (errorEl) errorEl.textContent = "Puste nagranie — spróbuj ponownie.";
+            return;
+          }
+          var ext = blobType.indexOf("wav") !== -1 ? "wav" : "webm";
+          var fname = "voice-" + Date.now() + "." + ext;
+          var file = new File([blob], fname, { type: blobType });
+          uploadAttachment(file, fname);
+        };
+        mediaRecorder.start();
+        startMicVisual();
+      }).catch(function () {
+        stopMicVisual();
+        if (errorEl) errorEl.textContent = "Nie udało się uzyskać dostępu do mikrofonu.";
+      });
+    });
+  }
+
+  var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  var wsUrl = proto + "//" + window.location.host + "/ws/chat/" + channelId + "/";
+  var socket = new WebSocket(wsUrl);
+
+  socket.onopen = function () {
+    setStatus("Połączono (WebSocket)", true);
+  };
+
+  socket.onclose = function (ev) {
+    var blocked = ev && ev.code === 4004;
+    setStatus(blocked ? "Zablokowany — brak dostępu do czatu" : "Rozłączono", false);
+  };
+
+  socket.onerror = function () {
+    setStatus("Błąd połączenia", false);
+  };
+
+  socket.onmessage = function (event) {
+    var data;
+    try {
+      data = JSON.parse(event.data);
+    } catch (e) {
+      return;
+    }
+    if (data.type === "message" && data.message) {
+      appendMessage(data.message);
+      clearError();
+    } else if (data.type === "message_deleted" && data.message_id != null) {
+      removeMessageRow(data.message_id);
+    } else if (data.type === "error") {
+      if (errorEl) errorEl.textContent = data.message || "Błąd";
+    }
+  };
+
+  function sendChat() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      if (errorEl) errorEl.textContent = "Brak połączenia z serwerem.";
+      return;
+    }
+    var text = (inputEl && inputEl.value) ? inputEl.value.trim() : "";
+    if (!text) return;
+    clearError();
+    socket.send(JSON.stringify({ type: "chat_message", content: text }));
+    if (inputEl) inputEl.value = "";
+  }
+
+  if (sendBtn) sendBtn.addEventListener("click", sendChat);
+
+  if (inputEl) {
+    inputEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+  }
+
+  if (scrollEl) {
+    scrollEl.addEventListener("click", function (ev) {
+      var del = ev.target.closest(".btn-msg-delete");
+      if (del) {
+        var row = del.closest(".chat-message-row");
+        if (!row) return;
+        var mid = row.getAttribute("data-message-id");
+        if (!mid) return;
+        if (!window.confirm("Usunąć tę wiadomość?")) return;
+        postModeration(messageDeleteUrl(mid));
+        return;
+      }
+      var blk = ev.target.closest(".btn-msg-block");
+      if (blk) {
+        var row2 = blk.closest(".chat-message-row");
+        if (!row2) return;
+        var aid = row2.getAttribute("data-author-id");
+        if (!aid) return;
+        if (!window.confirm("Zablokować tego użytkownika na tym serwerze?")) return;
+        postModeration(blockUserUrl(aid));
+      }
+    });
+  }
+
+  scrollToBottom();
+})();
+</script>
+{% endif %}
+{% endblock %}

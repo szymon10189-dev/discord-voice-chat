@@ -1,0 +1,15 @@
+# Core
+Django>=6.0,<7
+Pillow>=11.0
+
+# ASGI / czat na żywo
+channels>=4.2,<5
+daphne>=4.1,<5
+channels-redis>=4.2,<5
+redis>=5.0,<6
+
+# Wdrożenie (Render i inne PaaS)
+gunicorn>=23.0,<24
+whitenoise>=6.8,<7
+dj-database-url>=2.3,<3
+psycopg2-binary>=2.9,<3

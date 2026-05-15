@@ -1,0 +1,17 @@
+# Blueprint Render.com — dostosuj nazwę serwisu i dodaj Redis (zalecane dla Channels).
+# Dokumentacja: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: discord-clone
+    runtime: python
+    plan: free
+    buildCommand: bash build.sh
+    startCommand: bash scripts/start_daphne.sh
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      # Ustaw w panelu: DATABASE_URL (PostgreSQL), opcjonalnie REDIS_URL (Channels).

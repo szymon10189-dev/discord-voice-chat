@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Wiadomości prywatne — discord_clone{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+    <h1 class="h4 mb-4">Wiadomości prywatne</h1>
+
+    <div class="card card-discord mb-4">
+      <div class="card-header py-3">Nowa rozmowa</div>
+      <div class="card-body p-4">
+        <p class="text-discord-muted small mb-3">Podaj dokładną nazwę użytkownika (jak przy logowaniu). Otworzy się wątek — możesz od razu napisać wiadomość.</p>
+        <form method="post" action="" class="row g-2 align-items-end">
+          {% csrf_token %}
+          <div class="col-md-8">
+            <label class="form-label small text-secondary" for="{{ start_form.username.id_for_label }}">{{ start_form.username.label }}</label>
+            {{ start_form.username }}
+            {% if start_form.username.errors %}
+              <div class="small text-danger">{{ start_form.username.errors|striptags }}</div>
+            {% endif %}
+          </div>
+          <div class="col-md-4">
+            <button type="submit" class="btn btn-discord-primary w-100">Otwórz rozmowę</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <h2 class="h5 mb-3">Ostatnie rozmowy</h2>
+    {% if conv_rows %}
+      <div class="list-group shadow-sm">
+        {% for row in conv_rows %}
+          <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-start bg-dark text-light border-secondary"
+             href="{% url 'core:dm_thread' row.other.id %}">
+            <div>
+              <div class="fw-semibold">{{ row.other.username }}</div>
+              {% if row.last %}
+                <div class="small text-secondary text-truncate" style="max-width: 28rem;">
+                  {% if row.last.author_id == user.id %}Ty: {% endif %}{{ row.last.content|default:"(załącznik)"|truncatechars:80 }}
+                </div>
+              {% else %}
+                <div class="small text-secondary">Brak wiadomości — napisz pierwszą.</div>
+              {% endif %}
+            </div>
+            <span class="badge bg-secondary rounded-pill align-self-center">Otwórz</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-discord-muted">Nie masz jeszcze żadnych rozmów prywatnych. Użyj formularza powyżej, aby rozpocząć.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
