@@ -6,6 +6,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpResponseBadRequest, JsonResponse
+from django.db import IntegrityError, transaction
 from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -412,10 +413,19 @@ class RegisterView(FormView):
     success_url = reverse_lazy("core:login")
 
     def form_valid(self, form):
-        user = form.save()
         from .bootstrap import add_user_to_default_server
 
-        add_user_to_default_server(user)
+        try:
+            with transaction.atomic():
+                user = form.save()
+                add_user_to_default_server(user)
+        except IntegrityError:
+            form.add_error(
+                "username",
+                "Ta nazwa użytkownika jest już zajęta. Wybierz inną.",
+            )
+            return self.form_invalid(form)
+
         messages.success(
             self.request,
             "Konto zostało utworzone. Po zalogowaniu zobaczysz domyślny serwer i kanał #ogólny.",

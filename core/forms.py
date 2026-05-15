@@ -52,6 +52,15 @@ class RegisterForm(UserCreationForm):
                     "form-control bg-dark text-light border-secondary",
                 )
 
+    def clean_username(self) -> str:
+        username = self.cleaned_data.get("username") or ""
+        username = User.normalize_username(username.strip())
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError(
+                "Użytkownik o tej nazwie już istnieje. Wybierz inną nazwę.",
+            )
+        return username
+
 
 class ProfileForm(forms.ModelForm):
     class Meta:
