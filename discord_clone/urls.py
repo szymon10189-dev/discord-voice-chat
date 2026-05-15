@@ -10,3 +10,5 @@ urlpatterns = [
 
 if settings.DEBUG or getattr(settings, "SERVE_MEDIA", False):
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+handler404 = "core.views.page_not_found_view"

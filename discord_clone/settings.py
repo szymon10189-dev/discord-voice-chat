@@ -130,7 +130,7 @@ USE_I18N = True
 USE_TZ = True
 
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
@@ -140,7 +140,9 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Na Renderze (brak nginx) pliki z uploadu serwuje Django — inaczej /media/ → 404.
 SERVE_MEDIA = _env_bool(
     "SERVE_MEDIA",
-    default=DEBUG or os.environ.get("RENDER") == "true",
+    default=DEBUG
+    or os.environ.get("RENDER") == "true"
+    or bool(os.environ.get("RENDER_EXTERNAL_HOSTNAME")),
 )
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024

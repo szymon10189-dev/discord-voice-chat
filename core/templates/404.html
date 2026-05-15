@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}404 — Brak strony{% endblock %}
+{% block content %}
+<div class="row justify-content-center py-4 py-md-5">
+  <div class="col-12 col-md-10 col-lg-8 text-center">
+    <img src="{% static '404error.gif' %}" alt="Błąd 404" class="img-fluid rounded-3 shadow mb-4"
+         style="max-height: min(50vh, 420px); width: auto; object-fit: contain;">
+    <h1 class="display-6 fw-bold mb-2">Brak strony</h1>
+    <p class="text-discord-muted lead mb-4">
+      Nie znaleźliśmy adresu, którego szukasz (błąd 404).
+    </p>
+    <div class="d-flex flex-wrap justify-content-center gap-2">
+      <a href="{% url 'core:home' %}" class="btn btn-discord-primary px-4">Strona główna</a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'core:dm_inbox' %}" class="btn btn-discord-outline px-4">Wiadomości</a>
+      {% else %}
+        <a href="{% url 'core:login' %}" class="btn btn-discord-outline px-4">Logowanie</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

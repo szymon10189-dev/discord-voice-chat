@@ -435,3 +435,8 @@ class ProfileEditView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         messages.success(self.request, "Profil został zapisany.")
         return super().form_valid(form)
+
+
+def page_not_found_view(request, exception):
+    """Niestandardowa strona 404 (szablon 404.html + GIF)."""
+    return render(request, "404.html", status=404)
