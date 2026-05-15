@@ -11,5 +11,3 @@ services:
         value: "False"
       - key: SECRET_KEY
         generateValue: true
-      # Po pierwszym deployu ustaw w panelu (jeśli auto-host nie wystarczy):
-      # DJANGO_ALLOWED_HOSTS = twoja-app.onrender.com

@@ -1,12 +1,3 @@
-"""
-Konfiguracja Gunicorn (HTTP, WSGI).
-Uruchomienie: gunicorn -c gunicorn.conf.py discord_clone.wsgi:application
-
-Uwaga: ten projekt używa Django Channels (WebSockety). W produkcji z WS
-zwykle uruchamia się Daphne (ASGI) zamiast Gunicorn — patrz scripts/start_daphne.sh.
-Gunicorn nadaje się do wdrożeń bez WebSocketów lub jako worker za reverse proxy.
-"""
-
 import multiprocessing
 import os
 

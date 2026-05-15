@@ -18,13 +18,11 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
-# --- Bezpieczeństwo / środowisko ---
 SECRET_KEY = os.environ.get(
     "SECRET_KEY",
     "django-insecure-dev-only-change-in-env-for-production",
 )
 
-# Domyślnie True dla lokalnego dev; na Render ustaw DEBUG=False
 DEBUG = _env_bool("DEBUG", default=True)
 
 _hosts = os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip()
@@ -96,15 +94,12 @@ TEMPLATES = [
 WSGI_APPLICATION = "discord_clone.wsgi.application"
 ASGI_APPLICATION = "discord_clone.asgi.application"
 
-# Czat na żywo — jeden proces (Render free): InMemory wystarczy na projekt studencki.
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
 
-
-# --- Baza danych (SQLite) ---
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
