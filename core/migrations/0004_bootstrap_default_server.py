@@ -1,3 +1,4 @@
+from django.contrib.auth.hashers import make_password
 from django.db import migrations
 
 DEFAULT_SERVER_NAME = "Serwer główny"
@@ -27,7 +28,7 @@ def bootstrap(apps, schema_editor):
         },
     )
     if created:
-        system_user.set_unusable_password()
+        system_user.password = make_password(None)
         system_user.save(update_fields=["password"])
 
     server, _ = Server.objects.get_or_create(
