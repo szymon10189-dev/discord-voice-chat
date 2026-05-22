@@ -1,3 +1,5 @@
+import json
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib import messages
@@ -22,7 +24,17 @@ from .forms import (
     RegisterForm,
 )
 from .message_payload import build_message_payload
+from .reactions import (
+    attach_reactions_to_direct_messages,
+    attach_reactions_to_messages,
+    toggle_direct_message_reaction,
+    toggle_message_reaction,
+    validate_reaction_emoji,
+)
 from .dm_utils import get_or_create_direct_conversation, user_participates_in_conversation
+from .presence import online_user_ids
+from .reporting import create_user_report
+from .search_utils import search_for_viewer, server_members_for_sidebar
 from .models import Channel, DirectConversation, DirectMessage, Message, Server, ServerBan
 from .services import (
     moderator_can_block_user,
@@ -112,22 +124,31 @@ class DirectMessageThreadView(LoginRequiredMixin, View):
             raise PermissionDenied("Brak dostępu do tej rozmowy.")
         return super().dispatch(request, *args, user_id=user_id, **kwargs)
 
-    def get(self, request, user_id):
-        msgs = list(
+    def _dm_messages(self):
+        return list(
             DirectMessage.objects.filter(conversation=self.conversation)
             .select_related("author")
             .order_by("created_at")[:500],
         )
+
+    def _dm_context(self, request, msgs, form):
+        if msgs:
+            attach_reactions_to_direct_messages(msgs, request.user)
+        return {
+            "conversation": self.conversation,
+            "other": self.other_user,
+            "messages": msgs,
+            "form": form,
+            "conv_rows": _dm_inbox_rows(request.user),
+            "online_user_ids": online_user_ids(),
+        }
+
+    def get(self, request, user_id):
+        msgs = self._dm_messages()
         return render(
             request,
             self.template_name,
-            {
-                "conversation": self.conversation,
-                "other": self.other_user,
-                "messages": msgs,
-                "form": DirectMessageForm(),
-                "conv_rows": _dm_inbox_rows(request.user),
-            },
+            self._dm_context(request, msgs, DirectMessageForm()),
         )
 
     def post(self, request, user_id):
@@ -138,21 +159,56 @@ class DirectMessageThreadView(LoginRequiredMixin, View):
             dm.author = request.user
             dm.save()
             return redirect("core:dm_thread", user_id=self.other_user.pk)
-        msgs = list(
-            DirectMessage.objects.filter(conversation=self.conversation)
-            .select_related("author")
-            .order_by("created_at")[:500],
-        )
+        msgs = self._dm_messages()
         return render(
             request,
             self.template_name,
+            self._dm_context(request, msgs, form),
+        )
+
+
+class DirectMessageReactionToggleView(LoginRequiredMixin, View):
+    """AJAX: przełącz reakcję emoji na wiadomości prywatnej."""
+
+    def post(self, request, user_id, message_id, *args, **kwargs):
+        other = get_object_or_404(User, pk=user_id)
+        if other.pk == request.user.pk:
+            return JsonResponse({"error": "Nieprawidłowa rozmowa."}, status=400)
+
+        conversation = get_or_create_direct_conversation(request.user, other)
+        if not user_participates_in_conversation(request.user, conversation):
+            return JsonResponse({"error": "Brak dostępu do tej rozmowy."}, status=403)
+
+        dm = get_object_or_404(
+            DirectMessage,
+            pk=message_id,
+            conversation=conversation,
+        )
+
+        emoji_raw = ""
+        if request.content_type and "application/json" in request.content_type:
+            try:
+                body = json.loads(request.body.decode("utf-8") or "{}")
+                emoji_raw = body.get("emoji", "")
+            except json.JSONDecodeError:
+                return JsonResponse({"error": "Nieprawidłowy JSON."}, status=400)
+        else:
+            emoji_raw = request.POST.get("emoji", "")
+
+        try:
+            reactions = toggle_direct_message_reaction(dm, request.user, emoji_raw)
+        except ValidationError as exc:
+            return JsonResponse(
+                {"error": _format_upload_validation_error(exc)},
+                status=400,
+            )
+
+        return JsonResponse(
             {
-                "conversation": self.conversation,
-                "other": self.other_user,
-                "messages": msgs,
-                "form": form,
-                "conv_rows": _dm_inbox_rows(request.user),
-            },
+                "ok": True,
+                "message_id": message_id,
+                "reactions": reactions,
+            }
         )
 
 
@@ -173,6 +229,26 @@ def _format_upload_validation_error(exc: ValidationError) -> str:
     if hasattr(exc, "messages"):
         return "; ".join(str(m) for m in exc.messages)
     return str(exc)
+
+
+def _parse_report_payload(request) -> tuple[str, int | None]:
+    reason = ""
+    message_id = None
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValidationError("Nieprawidłowy JSON.") from exc
+        reason = (body.get("reason") or "").strip()
+        raw_mid = body.get("message_id")
+        if raw_mid not in (None, ""):
+            message_id = int(raw_mid)
+    else:
+        reason = (request.POST.get("reason") or "").strip()
+        raw_mid = request.POST.get("message_id")
+        if raw_mid:
+            message_id = int(raw_mid)
+    return reason, message_id
 
 
 class ChatMessageUploadView(LoginRequiredMixin, View):
@@ -232,6 +308,60 @@ class ChatMessageUploadView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "message": payload})
 
 
+class ChatMessageReactionToggleView(LoginRequiredMixin, View):
+    """AJAX: przełącz reakcję emoji na wiadomości + broadcast WebSocket."""
+
+    def post(self, request, channel_id, message_id, *args, **kwargs):
+        channel = get_object_or_404(Channel, pk=channel_id)
+        if not user_has_server_access(request.user, channel.server):
+            return JsonResponse({"error": "Brak dostępu do tego kanału."}, status=403)
+        if user_is_blocked_on_server(request.user, channel.server):
+            return JsonResponse(
+                {"error": "Jesteś zablokowany na tym serwerze."},
+                status=403,
+            )
+
+        msg = get_object_or_404(Message, pk=message_id, channel=channel)
+
+        emoji_raw = ""
+        if request.content_type and "application/json" in request.content_type:
+            try:
+                body = json.loads(request.body.decode("utf-8") or "{}")
+                emoji_raw = body.get("emoji", "")
+            except json.JSONDecodeError:
+                return JsonResponse({"error": "Nieprawidłowy JSON."}, status=400)
+        else:
+            emoji_raw = request.POST.get("emoji", "")
+
+        try:
+            reactions = toggle_message_reaction(msg, request.user, emoji_raw)
+        except ValidationError as exc:
+            return JsonResponse(
+                {"error": _format_upload_validation_error(exc)},
+                status=400,
+            )
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"chat_{channel.id}",
+            {
+                "type": "chat.broadcast",
+                "payload": {
+                    "type": "reactions_updated",
+                    "message_id": message_id,
+                    "reactions": reactions,
+                },
+            },
+        )
+        return JsonResponse(
+            {
+                "ok": True,
+                "message_id": message_id,
+                "reactions": reactions,
+            }
+        )
+
+
 class ChatMessageDeleteView(LoginRequiredMixin, View):
     """AJAX: usuń wiadomość (Moderator / Admin) + broadcast WebSocket."""
 
@@ -285,6 +415,94 @@ class ServerUserUnblockView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "user_id": user_id})
 
 
+class ServerUserReportView(LoginRequiredMixin, View):
+    """AJAX: zgłoś użytkownika na serwerze (widoczne w panelu admina)."""
+
+    def post(self, request, server_id, user_id, *args, **kwargs):
+        server = get_object_or_404(Server, pk=server_id)
+        target = get_object_or_404(User, pk=user_id)
+
+        if not user_has_server_access(request.user, server):
+            return JsonResponse({"error": "Brak dostępu do tego serwera."}, status=403)
+
+        try:
+            reason, message_id = _parse_report_payload(request)
+        except (ValidationError, ValueError, TypeError) as exc:
+            return JsonResponse(
+                {"error": _format_upload_validation_error(exc) if isinstance(exc, ValidationError) else "Nieprawidłowe dane zgłoszenia."},
+                status=400,
+            )
+
+        message = None
+        if message_id is not None:
+            message = get_object_or_404(Message, pk=message_id, channel__server=server)
+
+        try:
+            report = create_user_report(
+                reporter=request.user,
+                reported_user=target,
+                reason=reason,
+                server=server,
+                message=message,
+            )
+        except ValidationError as exc:
+            return JsonResponse(
+                {"error": _format_upload_validation_error(exc)},
+                status=400,
+            )
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "report_id": report.pk,
+                "reported_user_id": target.pk,
+            }
+        )
+
+
+class DirectUserReportView(LoginRequiredMixin, View):
+    """AJAX: zgłoś użytkownika z rozmowy DM."""
+
+    def post(self, request, user_id, *args, **kwargs):
+        other = get_object_or_404(User, pk=user_id)
+        if other.pk == request.user.pk:
+            return JsonResponse({"error": "Nie możesz zgłosić samego siebie."}, status=400)
+
+        conversation = get_or_create_direct_conversation(request.user, other)
+        if not user_participates_in_conversation(request.user, conversation):
+            return JsonResponse({"error": "Brak dostępu do tej rozmowy."}, status=403)
+
+        try:
+            reason, _message_id = _parse_report_payload(request)
+        except (ValidationError, ValueError, TypeError) as exc:
+            return JsonResponse(
+                {"error": _format_upload_validation_error(exc) if isinstance(exc, ValidationError) else "Nieprawidłowe dane zgłoszenia."},
+                status=400,
+            )
+
+        try:
+            report = create_user_report(
+                reporter=request.user,
+                reported_user=other,
+                reason=reason,
+                server=None,
+                message=None,
+            )
+        except ValidationError as exc:
+            return JsonResponse(
+                {"error": _format_upload_validation_error(exc)},
+                status=400,
+            )
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "report_id": report.pk,
+                "reported_user_id": other.pk,
+            }
+        )
+
+
 class HomeView(TemplateView):
     template_name = "core/home.html"
 
@@ -298,109 +516,276 @@ class HomeView(TemplateView):
         return ctx
 
 
-class DashboardView(LoginRequiredMixin, View):
-    """Layout jak Discord: lista kanałów + okno czatu."""
+def _server_channel_lists(server):
+    qs = Channel.objects.filter(server=server).order_by("channel_type", "name")
+    return {
+        "text_channels": qs.filter(channel_type=Channel.ChannelType.TEXT),
+        "voice_channels": qs.filter(channel_type=Channel.ChannelType.VOICE),
+    }
 
-    template_name = "core/dashboard.html"
 
+def _admin_channel_forms(is_admin, text_form=None, voice_form=None):
+    if not is_admin:
+        return None, None
+    if text_form is None:
+        text_form = ChannelCreateForm(channel_type=Channel.ChannelType.TEXT)
+    if voice_form is None:
+        voice_form = ChannelCreateForm(channel_type=Channel.ChannelType.VOICE)
+    return text_form, voice_form
+
+
+class ServerChannelAccessMixin:
     def dispatch(self, request, *args, **kwargs):
         self.server = get_object_or_404(Server, pk=kwargs["server_id"])
         if not user_has_server_access(request.user, self.server):
             raise PermissionDenied("Nie masz dostępu do tego serwera.")
         return super().dispatch(request, *args, **kwargs)
 
+    def _try_create_channel(self, request, *, create_key: str, channel_type: str):
+        if create_key not in request.POST:
+            return None
+        if not user_is_server_admin(request.user, self.server):
+            raise PermissionDenied("Tylko administrator może tworzyć kanały.")
+        form = ChannelCreateForm(request.POST, channel_type=channel_type)
+        if form.is_valid():
+            ch = form.save(commit=False)
+            ch.server = self.server
+            ch.channel_type = channel_type
+            ch.save()
+            label = "głosowy" if channel_type == Channel.ChannelType.VOICE else "tekstowy"
+            messages.success(request, f"Utworzono kanał {label}: {ch.name}.")
+            if ch.is_voice:
+                return redirect(
+                    "core:voice_channel",
+                    server_id=self.server.id,
+                    voice_channel_id=ch.id,
+                )
+            return redirect(
+                "core:dashboard_channel",
+                server_id=self.server.id,
+                channel_id=ch.id,
+            )
+        return form
+
+
+class DashboardView(LoginRequiredMixin, ServerChannelAccessMixin, View):
+    template_name = "core/dashboard.html"
+
     def get(self, request, server_id, channel_id=None):
-        server = self.server
-        channels = Channel.objects.filter(server=server).order_by("name")
+        channel_lists = _server_channel_lists(self.server)
         channel = None
         messages_list: list[Message] = []
         if channel_id is not None:
-            channel = get_object_or_404(Channel, pk=channel_id, server=server)
+            raw = get_object_or_404(Channel, pk=channel_id, server=self.server)
+            if raw.is_voice:
+                return redirect(
+                    "core:voice_channel",
+                    server_id=self.server.id,
+                    voice_channel_id=raw.id,
+                )
+            channel = raw
             messages_list = list(
                 Message.objects.filter(channel=channel)
                 .select_related("author")
                 .order_by("created_at")[:500],
             )
-        elif channels.exists():
-            first = channels.first()
+        elif channel_lists["text_channels"].exists():
+            first = channel_lists["text_channels"].first()
             return redirect(
                 "core:dashboard_channel",
-                server_id=server.id,
+                server_id=self.server.id,
                 channel_id=first.id,
             )
 
-        ctx = self._build_context(request, channel, channels, messages_list)
+        ctx = self._build_context(request, channel, channel_lists, messages_list)
         return render(request, self.template_name, ctx)
 
     def post(self, request, server_id, channel_id=None):
-        server = self.server
-        channels = Channel.objects.filter(server=server).order_by("name")
+        channel_lists = _server_channel_lists(self.server)
         channel = None
+        messages_list: list[Message] = []
         if channel_id is not None:
-            channel = get_object_or_404(Channel, pk=channel_id, server=server)
-
-        if "create_channel" in request.POST:
-            if not user_is_server_admin(request.user, server):
-                raise PermissionDenied("Tylko administrator może tworzyć kanały.")
-            form = ChannelCreateForm(request.POST)
-            if form.is_valid():
-                ch = form.save(commit=False)
-                ch.server = server
-                ch.save()
-                messages.success(request, f"Utworzono kanał #{ch.name}.")
+            raw = get_object_or_404(Channel, pk=channel_id, server=self.server)
+            if raw.is_voice:
                 return redirect(
-                    "core:dashboard_channel",
-                    server_id=server.id,
-                    channel_id=ch.id,
+                    "core:voice_channel",
+                    server_id=self.server.id,
+                    voice_channel_id=raw.id,
                 )
-            messages_list: list[Message] = []
-            if channel:
-                messages_list = list(
-                    Message.objects.filter(channel=channel)
-                    .select_related("author")
-                    .order_by("created_at")[:500],
-                )
-            ctx = self._build_context(
-                request,
-                channel,
-                channels,
-                messages_list,
-                channel_form=form,
+            channel = raw
+            messages_list = list(
+                Message.objects.filter(channel=channel)
+                .select_related("author")
+                .order_by("created_at")[:500],
             )
-            return render(request, self.template_name, ctx)
 
-        return HttpResponseBadRequest("Nieobsługiwane żądanie.")
+        text_form = self._try_create_channel(
+            request,
+            create_key="create_text_channel",
+            channel_type=Channel.ChannelType.TEXT,
+        )
+        if text_form is not None and not isinstance(text_form, ChannelCreateForm):
+            return text_form
+
+        voice_form = self._try_create_channel(
+            request,
+            create_key="create_voice_channel",
+            channel_type=Channel.ChannelType.VOICE,
+        )
+        if text_form is None and voice_form is None:
+            return HttpResponseBadRequest("Nieobsługiwane żądanie.")
+        if voice_form is not None and not isinstance(voice_form, ChannelCreateForm):
+            return voice_form
+
+        ctx = self._build_context(
+            request,
+            channel,
+            channel_lists,
+            messages_list,
+            text_form=text_form if isinstance(text_form, ChannelCreateForm) else None,
+            voice_form=voice_form if isinstance(voice_form, ChannelCreateForm) else None,
+        )
+        return render(request, self.template_name, ctx)
 
     def _build_context(
         self,
         request,
         channel,
-        channels,
+        channel_lists,
         messages_list,
         *,
-        channel_form=None,
+        text_form=None,
+        voice_form=None,
     ):
-        server = self.server
-        is_admin = user_is_server_admin(request.user, server)
-        if channel_form is None:
-            channel_form = ChannelCreateForm() if is_admin else None
-        elif not is_admin:
-            channel_form = None
+        is_admin = user_is_server_admin(request.user, self.server)
+        text_form, voice_form = _admin_channel_forms(is_admin, text_form, voice_form)
+        if messages_list:
+            attach_reactions_to_messages(messages_list, request.user)
+
         return {
-            "server": server,
-            "channels": channels,
+            "server": self.server,
+            "text_channels": channel_lists["text_channels"],
+            "voice_channels": channel_lists["voice_channels"],
             "active_channel": channel,
+            "active_voice_channel": None,
             "messages": messages_list,
             "is_server_admin": is_admin,
-            "channel_form": channel_form,
-            "can_moderate": user_can_moderate(request.user, server),
+            "text_channel_form": text_form,
+            "voice_channel_form": voice_form,
+            "can_moderate": user_can_moderate(request.user, self.server),
+            "online_user_ids": online_user_ids(),
+            "server_members": server_members_for_sidebar(self.server),
         }
+
+
+class VoiceChannelView(LoginRequiredMixin, ServerChannelAccessMixin, View):
+    template_name = "core/voice_channel.html"
+
+    def get(self, request, server_id, voice_channel_id):
+        voice_channel = get_object_or_404(
+            Channel,
+            pk=voice_channel_id,
+            server=self.server,
+            channel_type=Channel.ChannelType.VOICE,
+        )
+        channel_lists = _server_channel_lists(self.server)
+        return render(
+            request,
+            self.template_name,
+            self._build_context(request, voice_channel, channel_lists),
+        )
+
+    def post(self, request, server_id, voice_channel_id):
+        voice_channel = get_object_or_404(
+            Channel,
+            pk=voice_channel_id,
+            server=self.server,
+            channel_type=Channel.ChannelType.VOICE,
+        )
+        channel_lists = _server_channel_lists(self.server)
+
+        text_form = self._try_create_channel(
+            request,
+            create_key="create_text_channel",
+            channel_type=Channel.ChannelType.TEXT,
+        )
+        if text_form is not None and not isinstance(text_form, ChannelCreateForm):
+            return text_form
+
+        voice_form = self._try_create_channel(
+            request,
+            create_key="create_voice_channel",
+            channel_type=Channel.ChannelType.VOICE,
+        )
+        if text_form is None and voice_form is None:
+            return HttpResponseBadRequest("Nieobsługiwane żądanie.")
+        if voice_form is not None and not isinstance(voice_form, ChannelCreateForm):
+            return voice_form
+
+        return render(
+            request,
+            self.template_name,
+            self._build_context(
+                request,
+                voice_channel,
+                channel_lists,
+                text_form=text_form if isinstance(text_form, ChannelCreateForm) else None,
+                voice_form=voice_form if isinstance(voice_form, ChannelCreateForm) else None,
+            ),
+        )
+
+    def _build_context(
+        self,
+        request,
+        voice_channel,
+        channel_lists,
+        *,
+        text_form=None,
+        voice_form=None,
+    ):
+        is_admin = user_is_server_admin(request.user, self.server)
+        text_form, voice_form = _admin_channel_forms(is_admin, text_form, voice_form)
+        return {
+            "server": self.server,
+            "text_channels": channel_lists["text_channels"],
+            "voice_channels": channel_lists["voice_channels"],
+            "active_channel": None,
+            "active_voice_channel": voice_channel,
+            "is_server_admin": is_admin,
+            "text_channel_form": text_form,
+            "voice_channel_form": voice_form,
+            "online_user_ids": online_user_ids(),
+            "server_members": server_members_for_sidebar(self.server),
+        }
+
+
+class SearchView(LoginRequiredMixin, View):
+    """Globalne wyszukiwanie kanałów i użytkowników na serwerach użytkownika."""
+
+    template_name = "core/search.html"
+
+    def get(self, request):
+        query = (request.GET.get("q") or "").strip()
+        results = search_for_viewer(request.user, query)
+        return render(
+            request,
+            self.template_name,
+            {
+                **results,
+                "online_user_ids": online_user_ids(),
+            },
+        )
 
 
 class AppLoginView(LoginView):
     template_name = "core/login.html"
     form_class = LoginForm
     redirect_authenticated_user = True
+
+    def get_success_url(self):
+        from .bootstrap import get_default_dashboard_redirect_url
+
+        return get_default_dashboard_redirect_url(self.request.user)
 
 
 class AppLogoutView(LogoutView):
@@ -428,7 +813,7 @@ class RegisterView(FormView):
 
         messages.success(
             self.request,
-            "Konto zostało utworzone. Po zalogowaniu zobaczysz domyślny serwer i kanał #ogólny.",
+            "Konto utworzone. Zaloguj się — trafisz na serwer główny z kanałem #ogólny i ogólny-głos.",
         )
         return super().form_valid(form)
 

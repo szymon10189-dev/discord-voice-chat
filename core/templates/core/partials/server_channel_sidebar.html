@@ -1,0 +1,95 @@
+{% load presence_extras %}
+<aside id="server-sidebar" class="col-12 col-md-4 col-lg-3 col-xl-2 bg-dark border-end border-secondary d-flex flex-column"
+       style="min-height: calc(100vh - 120px);">
+  <div class="p-3 border-bottom border-secondary">
+    <div class="fw-bold text-truncate">{{ server.name }}</div>
+    <div class="mt-2">
+      <input type="search" id="server-sidebar-search" class="form-control form-control-sm server-sidebar-search"
+             placeholder="Szukaj kanałów i użytkowników" autocomplete="off" aria-label="Szukaj kanałów i użytkowników">
+    </div>
+    <p id="sidebar-search-empty" class="sidebar-search-empty text-secondary mb-0 mt-2 d-none">Brak wyników.</p>
+  </div>
+
+  <div class="flex-grow-1 overflow-auto">
+    <div data-sidebar-section>
+      <div class="px-3 pt-2 pb-1">
+        <div class="small text-secondary text-uppercase mb-1" style="letter-spacing: 0.06em;">Kanały tekstowe</div>
+      </div>
+      <nav class="nav flex-column px-2 py-1">
+        {% for ch in text_channels %}
+          <a class="nav-link rounded-2 py-2 px-2 mb-1 {% if active_channel and ch.id == active_channel.id %}active bg-secondary text-white{% else %}text-secondary{% endif %}"
+             href="{% url 'core:dashboard_channel' server.id ch.id %}"
+             data-sidebar-search="{{ ch.name|lower }}">
+            <span class="text-secondary">#</span> {{ ch.name }}
+          </a>
+        {% empty %}
+          <p class="small text-secondary px-2 mb-0 sidebar-static-empty">Brak kanałów tekstowych.</p>
+        {% endfor %}
+      </nav>
+    </div>
+
+    <div data-sidebar-section>
+      <div class="px-3 pt-2 pb-1">
+        <div class="small text-secondary text-uppercase mb-1" style="letter-spacing: 0.06em;">Kanały głosowe</div>
+      </div>
+      <nav class="nav flex-column px-2 py-1">
+        {% for ch in voice_channels %}
+          <a class="nav-link rounded-2 py-2 px-2 mb-1 {% if active_voice_channel and ch.id == active_voice_channel.id %}active bg-secondary text-white{% else %}text-secondary{% endif %}"
+             href="{% url 'core:voice_channel' server.id ch.id %}"
+             data-sidebar-search="{{ ch.name|lower }}">
+            <i class="bi bi-volume-up-fill text-secondary me-1"></i>{{ ch.name }}
+          </a>
+        {% empty %}
+          <p class="small text-secondary px-2 mb-0 sidebar-static-empty">Brak kanałów głosowych.</p>
+        {% endfor %}
+      </nav>
+    </div>
+
+    <div data-sidebar-section>
+      <div class="px-3 pt-2 pb-1">
+        <div class="small text-secondary text-uppercase mb-1" style="letter-spacing: 0.06em;">Użytkownicy</div>
+      </div>
+      <nav class="nav flex-column px-2 py-1 pb-2">
+        {% for member in server_members %}
+          <a class="nav-link rounded-2 py-2 px-2 mb-1 text-secondary d-flex align-items-center gap-2"
+             href="{% url 'core:dm_thread' member.id %}"
+             data-sidebar-search="{{ member.username|lower }}">
+            {% include "core/partials/user_avatar.html" with profile_user=member is_online=member.id in online_user_ids size=28 %}
+            <span class="text-truncate">{{ member.username }}</span>
+          </a>
+        {% empty %}
+          <p class="small text-secondary px-2 mb-0 sidebar-static-empty">Brak użytkowników.</p>
+        {% endfor %}
+      </nav>
+    </div>
+  </div>
+
+  {% if is_server_admin %}
+    <div class="p-3 border-top border-secondary mt-auto bg-black bg-opacity-25">
+      {% if text_channel_form %}
+        <div class="small text-secondary text-uppercase mb-2" style="letter-spacing: 0.06em;">Nowy kanał tekstowy</div>
+        <form method="post" action="" class="d-grid gap-2 mb-3">
+          {% csrf_token %}
+          {{ text_channel_form.name }}
+          {{ text_channel_form.channel_type }}
+          {% if text_channel_form.name.errors %}
+            <div class="small text-danger">{{ text_channel_form.name.errors|striptags }}</div>
+          {% endif %}
+          <button type="submit" name="create_text_channel" value="1" class="btn btn-sm btn-primary">Utwórz kanał tekstowy</button>
+        </form>
+      {% endif %}
+      {% if voice_channel_form %}
+        <div class="small text-secondary text-uppercase mb-2" style="letter-spacing: 0.06em;">Nowy kanał głosowy</div>
+        <form method="post" action="" class="d-grid gap-2">
+          {% csrf_token %}
+          {{ voice_channel_form.name }}
+          {{ voice_channel_form.channel_type }}
+          {% if voice_channel_form.name.errors %}
+            <div class="small text-danger">{{ voice_channel_form.name.errors|striptags }}</div>
+          {% endif %}
+          <button type="submit" name="create_voice_channel" value="1" class="btn btn-sm btn-outline-light">Utwórz kanał głosowy</button>
+        </form>
+      {% endif %}
+    </div>
+  {% endif %}
+</aside>

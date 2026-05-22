@@ -121,17 +121,95 @@ class ServerBan(models.Model):
         return f"Ban {self.blocked_user} @ {self.server}"
 
 
+class UserReport(models.Model):
+    """Zgłoszenie użytkownika przez innego użytkownika (widoczne w panelu admina)."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Oczekuje"
+        REVIEWED = "reviewed", "Rozpatrzone"
+        DISMISSED = "dismissed", "Odrzucone"
+
+    reporter = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="submitted_reports",
+    )
+    reported_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_reports",
+    )
+    server = models.ForeignKey(
+        Server,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="user_reports",
+    )
+    message = models.ForeignKey(
+        "Message",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="user_reports",
+    )
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    admin_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Zgłoszenie użytkownika"
+        verbose_name_plural = "Zgłoszenia użytkowników"
+
+    def __str__(self) -> str:
+        return f"Zgłoszenie: {self.reported_user} (przez {self.reporter})"
+
+
 class Channel(models.Model):
+    class ChannelType(models.TextChoices):
+        TEXT = "text", "Tekstowy"
+        VOICE = "voice", "Głosowy"
+
     server = models.ForeignKey(
         Server,
         on_delete=models.CASCADE,
         related_name="channels",
     )
     name = models.CharField(max_length=255)
+    channel_type = models.CharField(
+        max_length=10,
+        choices=ChannelType.choices,
+        default=ChannelType.TEXT,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["server", "name", "channel_type"],
+                name="core_channel_unique_name_per_type",
+            ),
+        ]
+        ordering = ["channel_type", "name"]
+
+    @property
+    def is_voice(self) -> bool:
+        return self.channel_type == self.ChannelType.VOICE
+
+    @property
+    def is_text(self) -> bool:
+        return self.channel_type == self.ChannelType.TEXT
+
     def __str__(self) -> str:
-        return f"#{self.name}"
+        prefix = "🔊" if self.is_voice else "#"
+        return f"{prefix}{self.name}"
 
 
 class Message(models.Model):
@@ -180,6 +258,35 @@ class Message(models.Model):
     def __str__(self) -> str:
         preview = (self.content or "")[:40] or "(załącznik)"
         return f"{self.author}: {preview}"
+
+
+class MessageReaction(models.Model):
+    """Reakcja emoji użytkownika na wiadomość w kanale (toggle: ten sam emoji usuwa)."""
+
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name="reactions",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="message_reactions",
+    )
+    emoji = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["message", "user", "emoji"],
+                name="core_messagereaction_unique_per_user_emoji",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.emoji} on msg {self.message_id} by {self.user_id}"
 
 
 class DirectConversation(models.Model):
@@ -266,3 +373,32 @@ class DirectMessage(models.Model):
     def __str__(self) -> str:
         preview = (self.content or "")[:40] or "(załącznik)"
         return f"DM {self.author}: {preview}"
+
+
+class DirectMessageReaction(models.Model):
+    """Reakcja emoji użytkownika na wiadomość prywatną (toggle)."""
+
+    message = models.ForeignKey(
+        DirectMessage,
+        on_delete=models.CASCADE,
+        related_name="reactions",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="direct_message_reactions",
+    )
+    emoji = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["message", "user", "emoji"],
+                name="core_directmessagereaction_unique_per_user_emoji",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.emoji} on DM {self.message_id} by {self.user_id}"

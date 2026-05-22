@@ -1,0 +1,15 @@
+{% load media_extras %}
+<div class="user-avatar-wrap position-relative d-inline-block" data-user-id="{{ profile_user.id }}">
+  {% with av_url=profile_user.avatar|file_url %}
+  {% if av_url %}
+    <img src="{{ av_url }}" alt="" class="rounded-circle" width="{{ size|default:40 }}" height="{{ size|default:40 }}" style="object-fit: cover;">
+  {% else %}
+    <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-uppercase fw-bold"
+         style="width: {{ size|default:40 }}px; height: {{ size|default:40 }}px; font-size: 0.85rem;">
+      {{ profile_user.username|slice:":1" }}
+    </div>
+  {% endif %}
+  {% endwith %}
+  <span class="user-status-dot {% if is_online %}status-online{% else %}status-offline{% endif %}"
+        title="{% if is_online %}Online{% else %}Offline{% endif %}"></span>
+</div>

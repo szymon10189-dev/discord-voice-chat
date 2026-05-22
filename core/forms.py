@@ -86,12 +86,21 @@ class ProfileForm(forms.ModelForm):
 class ChannelCreateForm(forms.ModelForm):
     class Meta:
         model = Channel
-        fields = ("name",)
-        labels = {"name": "Nazwa kanału"}
+        fields = ("name", "channel_type")
+        labels = {
+            "name": "Nazwa kanału",
+            "channel_type": "Typ kanału",
+        }
+        widgets = {
+            "channel_type": forms.HiddenInput(),
+        }
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, channel_type=None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         _discord_input(self.fields["name"].widget)
+        if channel_type is not None:
+            self.fields["channel_type"].initial = channel_type
+            self.fields["channel_type"].widget = forms.HiddenInput()
 
     def clean_name(self) -> str:
         name = (self.cleaned_data.get("name") or "").strip()

@@ -1,0 +1,14 @@
+<div class="chat-reactions d-flex flex-wrap align-items-center gap-1 mt-1" data-message-id="{{ message_id }}">
+  {% for r in reaction_rows %}
+    <button type="button"
+            class="chat-reaction-pill{% if r.reacted_by_me %} is-mine{% endif %}"
+            data-message-id="{{ message_id }}"
+            data-emoji="{{ r.emoji }}"
+            title="Kliknij, aby przełączyć reakcję">
+      <span class="chat-reaction-emoji">{{ r.emoji }}</span>
+      <span class="chat-reaction-count">{{ r.count }}</span>
+    </button>
+  {% endfor %}
+  <button type="button" class="chat-reaction-add btn btn-sm btn-outline-secondary"
+          title="Dodaj reakcję" aria-label="Dodaj reakcję">+</button>
+</div>

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load static presence_extras %}
+{% block title %}Szukaj{% if query %}: {{ query }}{% endif %} — discord_clone{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="{% static 'css/search.css' %}">
+{% endblock %}
+{% block content %}
+<div class="row justify-content-center py-3">
+  <div class="col-lg-8">
+    <h1 class="h4 mb-3">Szukaj kanałów i użytkowników</h1>
+    <form method="get" action="{% url 'core:search' %}" class="mb-4">
+      <div class="input-group">
+        <input type="search" name="q" value="{{ query }}" minlength="2" maxlength="100"
+               class="form-control search-page-input" placeholder="Nazwa kanału lub użytkownika (min. 2 znaki)"
+               autofocus required>
+        <button type="submit" class="btn btn-discord-primary">Szukaj</button>
+      </div>
+    </form>
+
+    {% if query and query|length < 2 %}
+      <p class="text-secondary">Wpisz co najmniej 2 znaki.</p>
+    {% elif query %}
+      {% if not text_channels and not voice_channels and not users %}
+        <p class="text-secondary mb-0">Brak wyników dla „{{ query }}”.</p>
+      {% else %}
+        {% if text_channels %}
+          <h2 class="h6 text-secondary text-uppercase search-result-section-title mb-2">Kanały tekstowe</h2>
+          <div class="list-group mb-4 shadow-sm">
+            {% for ch in text_channels %}
+              <a class="list-group-item list-group-item-action bg-dark text-light border-secondary"
+                 href="{% url 'core:dashboard_channel' ch.server_id ch.id %}">
+                <span class="text-secondary">#</span> {{ ch.name }}
+                <span class="small text-secondary ms-2">· {{ ch.server.name }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if voice_channels %}
+          <h2 class="h6 text-secondary text-uppercase search-result-section-title mb-2">Kanały głosowe</h2>
+          <div class="list-group mb-4 shadow-sm">
+            {% for ch in voice_channels %}
+              <a class="list-group-item list-group-item-action bg-dark text-light border-secondary"
+                 href="{% url 'core:voice_channel' ch.server_id ch.id %}">
+                <i class="bi bi-volume-up-fill text-secondary me-1"></i>{{ ch.name }}
+                <span class="small text-secondary ms-2">· {{ ch.server.name }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if users %}
+          <h2 class="h6 text-secondary text-uppercase search-result-section-title mb-2">Użytkownicy</h2>
+          <div class="list-group shadow-sm">
+            {% for u in users %}
+              <a class="list-group-item list-group-item-action bg-dark text-light border-secondary d-flex align-items-center gap-2"
+                 href="{% url 'core:dm_thread' u.id %}">
+                {% include "core/partials/user_avatar.html" with profile_user=u is_online=u.id in online_user_ids size=32 %}
+                <span>@{{ u.username }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endif %}
+    {% else %}
+      <p class="text-secondary mb-0">Wyszukaj kanały tekstowe, głosowe i użytkowników na swoich serwerach.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

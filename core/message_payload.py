@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .media_utils import filefield_url_if_exists
 from .models import Message
+from .presence import is_user_online
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif"}
 AUDIO_EXT = {
@@ -57,9 +58,11 @@ def build_message_payload(msg: Message) -> dict:
         "author_id": author.id,
         "author_username": author.username,
         "author_avatar_url": avatar_url,
+        "author_is_online": is_user_online(author.id),
         "content": msg.content or "",
         "created_at": msg.created_at.isoformat(),
         "attachment_url": att_url,
         "attachment_kind": att_kind,
         "attachment_mime": att_mime,
+        "reactions": [],
     }

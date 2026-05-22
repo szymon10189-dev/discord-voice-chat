@@ -1,0 +1,78 @@
+.chat-reactions {
+  min-height: 1.5rem;
+}
+
+.chat-reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid #3f4147;
+  background: #2b2d31;
+  color: #f2f3f5;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.chat-reaction-pill:hover {
+  background: #404249;
+  border-color: #5865f2;
+}
+
+.chat-reaction-pill.is-mine {
+  border-color: #5865f2;
+  background: rgba(88, 101, 242, 0.2);
+}
+
+.chat-reaction-emoji {
+  font-size: 1rem;
+}
+
+.chat-reaction-count {
+  font-size: 0.75rem;
+  color: #949ba4;
+}
+
+.chat-reaction-add {
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  line-height: 1;
+  border-radius: 999px;
+  font-size: 0.95rem;
+}
+
+.chat-reaction-quick-picker {
+  position: absolute;
+  bottom: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 1200;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  max-width: 14rem;
+  padding: 0.35rem;
+  background: #2b2d31;
+  border: 1px solid #3f4147;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.chat-reactions {
+  position: relative;
+}
+
+.chat-reaction-quick-item {
+  border: none;
+  background: transparent;
+  font-size: 1.25rem;
+  padding: 0.15rem 0.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.chat-reaction-quick-item:hover {
+  background: #404249;
+}
