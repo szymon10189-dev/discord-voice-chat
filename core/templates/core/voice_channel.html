@@ -4,6 +4,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="{% static 'css/search.css' %}">
+<link rel="stylesheet" href="{% static 'css/voice-roster.css' %}">
 <style>
   .voice-panel {
     max-width: 42rem;
@@ -38,16 +39,16 @@
           <div class="card-body p-4">
             <h2 class="h6 mb-3">Połączenie głosowe</h2>
             <p class="text-secondary small mb-4">
-              Kliknij „Dołącz”, aby połączyć się z kanałem. Przeglądarka poprosi o dostęp do mikrofonu.
-              Inni użytkownicy na tym kanale usłyszą Cię na żywo (WebRTC).
+              Po wejściu na stronę jesteś widoczny na liście uczestników. Kliknij „Włącz mikrofon”, aby rozmawiać
+              (WebRTC). Bez mikrofonu tylko słuchasz i widzisz, kto jest na kanale.
             </p>
             <div class="d-flex flex-wrap gap-2 mb-4">
-              <button type="button" id="voice-join-btn" class="btn btn-discord-primary">Dołącz</button>
+              <button type="button" id="voice-join-btn" class="btn btn-discord-primary">Włącz mikrofon</button>
               <button type="button" id="voice-mute-btn" class="btn btn-discord-outline d-none">Wycisz</button>
               <button type="button" id="voice-leave-btn" class="btn btn-outline-danger d-none">Opuść kanał</button>
             </div>
-            <h3 class="h6 text-secondary text-uppercase small mb-2" style="letter-spacing: 0.06em;">Na kanale</h3>
-            <div id="voice-peers" class="border border-secondary rounded-3 p-3 bg-dark"></div>
+            <h3 class="h6 text-secondary text-uppercase small mb-2" style="letter-spacing: 0.06em;">Uczestnicy kanału</h3>
+            <div id="voice-peers" class="voice-roster-panel border border-secondary rounded-3 p-2 px-3 bg-dark"></div>
           </div>
         </div>
       </div>

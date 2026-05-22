@@ -1,0 +1,35 @@
+.voice-channel-block {
+  margin-bottom: 0.25rem;
+}
+
+.voice-channel-roster {
+  font-size: 0.78rem;
+}
+
+.voice-channel-roster .voice-roster-user {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem 0.15rem 0;
+  color: var(--dc-text-muted, #949ba4);
+}
+
+.voice-channel-roster .voice-roster-user .user-status-dot {
+  width: 8px;
+  height: 8px;
+  border-width: 1px;
+  position: static;
+  flex-shrink: 0;
+}
+
+.voice-roster-panel .voice-member-row {
+  border-bottom: 1px solid var(--dc-border, #3f4147);
+}
+
+.voice-roster-panel .voice-member-row:last-child {
+  border-bottom: none;
+}
+
+.voice-roster-panel .voice-member-you {
+  color: var(--dc-blurple, #5865f2);
+}

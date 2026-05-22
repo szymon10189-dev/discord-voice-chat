@@ -215,53 +215,15 @@ class VoiceConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
             username=self.user.username,
         )
 
-        await self.send_json(
-            {
-                "type": "peer_list",
-                "peers": _voice_peers_with_status(
-                    self.channel_id,
-                    exclude_user_id=self.user.pk,
-                ),
-                "you": {
-                    "user_id": self.user.pk,
-                    "username": self.user.username,
-                    "is_online": True,
-                },
-            }
-        )
-
-        await self.channel_layer.group_send(
-            self.group_name,
-            {
-                "type": "voice.broadcast",
-                "payload": {
-                    "type": "user_joined",
-                    "user": {
-                        "user_id": self.user.pk,
-                        "username": self.user.username,
-                        "is_online": is_user_online(self.user.pk),
-                    },
-                    "exclude_channel": self.channel_name,
-                },
-            },
-        )
+        await self._send_roster_to_self()
+        await self._broadcast_roster()
 
     async def disconnect(self, close_code):
         if hasattr(self, "group_name"):
             if await self._presence_disconnect():
                 await self._broadcast_presence(False)
             voice_leave(self.channel_id, self.user.pk)
-            await self.channel_layer.group_send(
-                self.group_name,
-                {
-                    "type": "voice.broadcast",
-                    "payload": {
-                        "type": "user_left",
-                        "user_id": self.user.pk,
-                        "username": self.user.username,
-                    },
-                },
-            )
+            await self._broadcast_roster()
             if hasattr(self, "presence_group"):
                 await self.channel_layer.group_discard(
                     self.presence_group,
@@ -300,11 +262,31 @@ class VoiceConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
             {"type": "error", "message": "Nieobsługiwany typ wiadomości."},
         )
 
-    async def voice_broadcast(self, event):
-        payload = event["payload"]
-        if payload.get("exclude_channel") == self.channel_name:
-            return
+    def _roster_payload(self) -> dict:
+        return {
+            "type": "peer_list",
+            "channel_id": self.channel_id,
+            "members": _voice_peers_with_status(self.channel_id, exclude_user_id=None),
+        }
+
+    async def _send_roster_to_self(self) -> None:
+        payload = self._roster_payload()
+        payload["you_user_id"] = self.user.pk
         await self.send_json(payload)
+
+    async def _broadcast_roster(self) -> None:
+        if not hasattr(self, "group_name"):
+            return
+        await self.channel_layer.group_send(
+            self.group_name,
+            {
+                "type": "voice.broadcast",
+                "payload": self._roster_payload(),
+            },
+        )
+
+    async def voice_broadcast(self, event):
+        await self.send_json(event["payload"])
 
     async def voice_signal(self, event):
         await self.send_json(event["payload"])

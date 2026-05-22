@@ -16,6 +16,8 @@
     var peers = new Map();
     var joined = false;
     var muted = false;
+    var inChannel = false;
+    var lastMembers = [];
 
     function setStatus(text, ok) {
       if (!statusEl) return;
@@ -31,61 +33,113 @@
     }
 
     function updatePresenceDot(userId, online) {
-      document.querySelectorAll('.user-avatar-wrap[data-user-id="' + userId + '"]').forEach(function (wrap) {
-        var statusDot = wrap.querySelector(".user-status-dot");
-        if (!statusDot) return;
-        statusDot.classList.toggle("status-online", !!online);
-        statusDot.classList.toggle("status-offline", !online);
-        statusDot.title = online ? "Online" : "Offline";
+      if (typeof global.updateUserPresenceDot === "function") {
+        global.updateUserPresenceDot(userId, online);
+      }
+    }
+
+    function renderSidebarRoster(members) {
+      var box = document.querySelector(
+        '[data-voice-roster-channel="' + channelId + '"]',
+      );
+      if (!box) return;
+      box.innerHTML = "";
+      if (!members || !members.length) {
+        var empty = document.createElement("div");
+        empty.className = "voice-roster-user text-secondary opacity-75 ps-1";
+        empty.textContent = "— pusto —";
+        box.appendChild(empty);
+        return;
+      }
+      members.forEach(function (m) {
+        var row = document.createElement("div");
+        row.className = "voice-roster-user";
+        row.setAttribute("data-sidebar-search", (m.username || "").toLowerCase());
+
+        var dot = document.createElement("span");
+        dot.className =
+          "user-status-dot " + (m.is_online ? "status-online" : "status-offline");
+
+        var name = document.createElement("span");
+        name.className = "text-truncate";
+        name.textContent = m.username || "Użytkownik";
+
+        row.appendChild(dot);
+        row.appendChild(name);
+        box.appendChild(row);
       });
     }
 
-    function renderPeerList(extraPeers) {
+    function renderMemberList(members, youUserId) {
       if (!peersEl) return;
       peersEl.innerHTML = "";
-      var list = extraPeers || [];
+      var list = members || [];
       if (!list.length) {
         var empty = document.createElement("p");
         empty.className = "small text-secondary mb-0";
-        empty.textContent = joined ? "Nikogo więcej na kanale." : "Dołącz, aby zobaczyć uczestników.";
+        empty.textContent = inChannel
+          ? "Na kanale nikogo jeszcze nie ma."
+          : "Łączenie z kanałem…";
         peersEl.appendChild(empty);
         return;
       }
-      list.forEach(function (p) {
+
+      list.forEach(function (m) {
+        var isYou = m.user_id === youUserId || m.user_id === currentUserId;
         var row = document.createElement("div");
-        row.className = "d-flex align-items-center gap-2 py-1";
-        row.setAttribute("data-peer-id", String(p.user_id));
+        row.className =
+          "voice-member-row d-flex align-items-center gap-2 py-2" +
+          (isYou ? " voice-member-you" : "");
+        row.setAttribute("data-peer-id", String(m.user_id));
 
         var iconWrap = document.createElement("span");
         iconWrap.className = "user-avatar-wrap position-relative d-inline-block";
-        iconWrap.setAttribute("data-user-id", String(p.user_id));
+        iconWrap.setAttribute("data-user-id", String(m.user_id));
 
         var icon = document.createElement("span");
-        icon.className = "rounded-circle bg-secondary d-inline-flex align-items-center justify-content-center text-uppercase fw-bold";
+        icon.className =
+          "rounded-circle bg-secondary d-inline-flex align-items-center justify-content-center text-uppercase fw-bold";
         icon.style.width = "32px";
         icon.style.height = "32px";
         icon.style.fontSize = "0.75rem";
-        icon.textContent = (p.username || "?").charAt(0);
+        icon.textContent = (m.username || "?").charAt(0);
         iconWrap.appendChild(icon);
 
         var dot = document.createElement("span");
-        dot.className = "user-status-dot user-status-dot-sm " + (p.is_online ? "status-online" : "status-offline");
-        dot.title = p.is_online ? "Online" : "Offline";
+        dot.className =
+          "user-status-dot user-status-dot-sm " +
+          (m.is_online ? "status-online" : "status-offline");
+        dot.title = m.is_online ? "Online" : "Offline";
         iconWrap.appendChild(dot);
 
-        var name = document.createElement("span");
-        name.className = "voice-peer-name";
-        name.textContent = p.username || "Użytkownik";
+        var nameWrap = document.createElement("div");
+        nameWrap.className = "flex-grow-1 min-width-0";
+        var name = document.createElement("div");
+        name.className = "voice-peer-name fw-semibold text-truncate";
+        name.textContent = (m.username || "Użytkownik") + (isYou ? " (Ty)" : "");
+        nameWrap.appendChild(name);
+
+        var badge = document.createElement("span");
+        badge.className = "small text-secondary";
+        badge.textContent = joined && isYou ? "Mówisz" : "Na kanale";
 
         var audioWrap = document.createElement("div");
-        audioWrap.className = "voice-remote-audio ms-auto";
-        audioWrap.setAttribute("data-audio-for", String(p.user_id));
+        audioWrap.className = "voice-remote-audio";
+        audioWrap.setAttribute("data-audio-for", String(m.user_id));
 
         row.appendChild(iconWrap);
-        row.appendChild(name);
-        row.appendChild(audioWrap);
+        row.appendChild(nameWrap);
+        row.appendChild(badge);
+        if (!isYou) row.appendChild(audioWrap);
         peersEl.appendChild(row);
       });
+    }
+
+    function applyPeerList(data) {
+      lastMembers = data.members || [];
+      var youId = data.you_user_id != null ? data.you_user_id : currentUserId;
+      renderMemberList(lastMembers, youId);
+      renderSidebarRoster(lastMembers);
     }
 
     function sendSignal(targetUserId, signalType, data) {
@@ -119,13 +173,12 @@
         peers.delete(userId);
       }
       if (peersEl) {
-        var row = peersEl.querySelector('[data-peer-id="' + userId + '"]');
-        if (row) row.remove();
-        if (!peersEl.querySelector("[data-peer-id]")) renderPeerList([]);
+        var audio = peersEl.querySelector('[data-audio-for="' + userId + '"]');
+        if (audio) audio.innerHTML = "";
       }
     }
 
-    function createPeerConnection(remoteUserId, remoteUsername, isInitiator) {
+    function createPeerConnection(remoteUserId, isInitiator) {
       if (peers.has(remoteUserId)) return peers.get(remoteUserId);
 
       var pc = new RTCPeerConnection({
@@ -171,15 +224,23 @@
       return pc;
     }
 
+    function startCallsWithOthers(members) {
+      if (!joined || !localStream) return;
+      (members || []).forEach(function (m) {
+        if (m.user_id === currentUserId) return;
+        createPeerConnection(m.user_id, true);
+      });
+    }
+
     async function handleSignal(msg) {
       var fromId = msg.from_user_id;
       var signalType = msg.signal_type;
       var data = msg.data;
-      if (!fromId || fromId === currentUserId) return;
+      if (!fromId || fromId === currentUserId || !joined) return;
 
       var pc = peers.get(fromId);
       if (!pc) {
-        pc = createPeerConnection(fromId, msg.from_username, false);
+        pc = createPeerConnection(fromId, false);
       }
 
       try {
@@ -199,17 +260,28 @@
     }
 
     function connectSocket() {
-      var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      var wsUrl = proto + "//" + window.location.host + "/ws/voice/" + channelId + "/";
+      if (socket && socket.readyState === WebSocket.OPEN) return;
+
+      var proto = global.location.protocol === "https:" ? "wss:" : "ws:";
+      var wsUrl = proto + "//" + global.location.host + "/ws/voice/" + channelId + "/";
       socket = new WebSocket(wsUrl);
 
       socket.onopen = function () {
-        setStatus("Połączono z kanałem głosowym", true);
+        inChannel = true;
+        setStatus(
+          joined
+            ? "Połączono — mikrofon aktywny"
+            : "Na kanale głosowym (bez mikrofonu)",
+          true,
+        );
       };
 
       socket.onclose = function (ev) {
+        inChannel = false;
         var blocked = ev && ev.code === 4004;
-        setStatus(blocked ? "Zablokowany — brak dostępu" : "Rozłączono", false);
+        setStatus(blocked ? "Zablokowany — brak dostępu" : "Opuszczono kanał", false);
+        renderMemberList([], currentUserId);
+        renderSidebarRoster([]);
       };
 
       socket.onerror = function () {
@@ -224,23 +296,8 @@
           return;
         }
         if (data.type === "peer_list") {
-          if (joined) renderPeerList(data.peers || []);
-        } else if (data.type === "user_joined" && joined) {
-          var peersOnPage = [];
-          if (peersEl) {
-            peersEl.querySelectorAll("[data-peer-id]").forEach(function (el) {
-              peersOnPage.push({
-                user_id: parseInt(el.getAttribute("data-peer-id"), 10),
-                username: (el.querySelector(".voice-peer-name") || {}).textContent || "",
-                is_online: !!(el.querySelector(".user-status-dot.status-online")),
-              });
-            });
-          }
-          peersOnPage.push(data.user);
-          renderPeerList(peersOnPage);
-          createPeerConnection(data.user.user_id, data.user.username, true);
-        } else if (data.type === "user_left") {
-          removePeer(data.user_id);
+          applyPeerList(data);
+          if (joined) startCallsWithOthers(data.members);
         } else if (data.type === "presence_update" && data.user_id != null) {
           updatePresenceDot(data.user_id, !!data.online);
         } else if (data.type === "signal") {
@@ -253,18 +310,25 @@
 
     async function joinVoice() {
       if (joined) return;
+      if (!inChannel) {
+        reportError("Poczekaj na połączenie z kanałem.");
+        return;
+      }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         reportError("Przeglądarka nie obsługuje mikrofonu.");
         return;
       }
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
         joined = true;
         if (joinBtn) joinBtn.classList.add("d-none");
         if (leaveBtn) leaveBtn.classList.remove("d-none");
         if (muteBtn) muteBtn.classList.remove("d-none");
-        setStatus("Jesteś na kanale głosowym", true);
-        connectSocket();
+        setStatus("Mówisz na kanale głosowym", true);
+        startCallsWithOthers(lastMembers);
       } catch (e) {
         reportError("Nie udało się uzyskać dostępu do mikrofonu.");
       }
@@ -286,12 +350,13 @@
         socket.close();
         socket = null;
       }
+      inChannel = false;
       if (joinBtn) joinBtn.classList.remove("d-none");
       if (leaveBtn) leaveBtn.classList.add("d-none");
       if (muteBtn) muteBtn.classList.add("d-none");
       muted = false;
       if (muteBtn) muteBtn.textContent = "Wycisz";
-      renderPeerList([]);
+      renderMemberList([], currentUserId);
       setStatus("Opuszczono kanał głosowy", undefined);
     }
 
@@ -308,8 +373,9 @@
     if (leaveBtn) leaveBtn.addEventListener("click", leaveVoice);
     if (muteBtn) muteBtn.addEventListener("click", toggleMute);
 
-    renderPeerList([]);
-    setStatus("Kliknij „Dołącz”, aby wejść na kanał głosowy", undefined);
+    renderMemberList([], currentUserId);
+    setStatus("Łączenie z kanałem głosowym…", undefined);
+    connectSocket();
 
     return { leave: leaveVoice };
   }

@@ -34,11 +34,24 @@
       </div>
       <nav class="nav flex-column px-2 py-1">
         {% for ch in voice_channels %}
-          <a class="nav-link rounded-2 py-2 px-2 mb-1 {% if active_voice_channel and ch.id == active_voice_channel.id %}active bg-secondary text-white{% else %}text-secondary{% endif %}"
-             href="{% url 'core:voice_channel' server.id ch.id %}"
-             data-sidebar-search="{{ ch.name|lower }}">
-            <i class="bi bi-volume-up-fill text-secondary me-1"></i>{{ ch.name }}
-          </a>
+          <div class="voice-channel-block" data-sidebar-search="{{ ch.name|lower }}">
+            <a class="nav-link rounded-2 py-2 px-2 {% if active_voice_channel and ch.id == active_voice_channel.id %}active bg-secondary text-white{% else %}text-secondary{% endif %}"
+               href="{% url 'core:voice_channel' server.id ch.id %}">
+              <i class="bi bi-volume-up-fill text-secondary me-1"></i>{{ ch.name }}
+            </a>
+            <div class="voice-channel-roster ps-3 pb-1" data-voice-roster-channel="{{ ch.id }}">
+              {% with members=voice_rosters|dict_get:ch.id %}
+                {% for m in members %}
+                  <div class="voice-roster-user" data-sidebar-search="{{ m.username|lower }}">
+                    <span class="user-status-dot {% if m.is_online %}status-online{% else %}status-offline{% endif %}"></span>
+                    <span class="text-truncate">{{ m.username }}</span>
+                  </div>
+                {% empty %}
+                  <div class="voice-roster-user text-secondary opacity-75 ps-1">— pusto —</div>
+                {% endfor %}
+              {% endwith %}
+            </div>
+          </div>
         {% empty %}
           <p class="small text-secondary px-2 mb-0 sidebar-static-empty">Brak kanałów głosowych.</p>
         {% endfor %}

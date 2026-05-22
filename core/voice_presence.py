@@ -45,6 +45,19 @@ def voice_peer_list(channel_id: int, exclude_user_id: int | None = None) -> list
     return peers
 
 
+def voice_rosters_for_channel_ids(channel_ids) -> dict[int, list[dict[str, Any]]]:
+    """Mapa channel_id → uczestnicy kanału głosowego (do sidebara / widoku)."""
+    from .presence import is_user_online
+
+    rosters: dict[int, list[dict[str, Any]]] = {}
+    for channel_id in channel_ids:
+        rosters[channel_id] = [
+            {**peer, "is_online": is_user_online(peer["user_id"])}
+            for peer in voice_peer_list(channel_id, exclude_user_id=None)
+        ]
+    return rosters
+
+
 def voice_channel_name_for_user(channel_id: int, user_id: int) -> str | None:
     entry = _presence.get(channel_id, {}).get(user_id)
     if not entry:

@@ -35,6 +35,7 @@ from .dm_utils import get_or_create_direct_conversation, user_participates_in_co
 from .presence import online_user_ids
 from .reporting import create_user_report
 from .search_utils import search_for_viewer, server_members_for_sidebar
+from .voice_presence import voice_rosters_for_channel_ids
 from .models import Channel, DirectConversation, DirectMessage, Message, Server, ServerBan
 from .services import (
     moderator_can_block_user,
@@ -524,6 +525,11 @@ def _server_channel_lists(server):
     }
 
 
+def _voice_rosters_for_lists(channel_lists) -> dict:
+    voice_ids = [ch.id for ch in channel_lists["voice_channels"]]
+    return voice_rosters_for_channel_ids(voice_ids)
+
+
 def _admin_channel_forms(is_admin, text_form=None, voice_form=None):
     if not is_admin:
         return None, None
@@ -675,6 +681,7 @@ class DashboardView(LoginRequiredMixin, ServerChannelAccessMixin, View):
             "can_moderate": user_can_moderate(request.user, self.server),
             "online_user_ids": online_user_ids(),
             "server_members": server_members_for_sidebar(self.server),
+            "voice_rosters": _voice_rosters_for_lists(channel_lists),
         }
 
 
@@ -756,6 +763,7 @@ class VoiceChannelView(LoginRequiredMixin, ServerChannelAccessMixin, View):
             "voice_channel_form": voice_form,
             "online_user_ids": online_user_ids(),
             "server_members": server_members_for_sidebar(self.server),
+            "voice_rosters": _voice_rosters_for_lists(channel_lists),
         }
 
 
