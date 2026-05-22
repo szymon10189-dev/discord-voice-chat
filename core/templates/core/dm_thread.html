@@ -57,7 +57,7 @@
       <div>
         <span class="text-secondary small">Rozmowa z</span>
         <h1 class="h5 mb-0 fw-semibold d-flex align-items-center gap-2">
-          {% include "core/partials/user_avatar.html" with profile_user=other is_online=other.id in online_user_ids size=32 %}
+          {% include "core/partials/user_avatar.html" with profile_user=other size=32 %}
           <span>@{{ other.username }}</span>
         </h1>
       </div>

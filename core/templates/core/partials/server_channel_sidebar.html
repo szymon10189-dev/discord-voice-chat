@@ -54,7 +54,7 @@
           <a class="nav-link rounded-2 py-2 px-2 mb-1 text-secondary d-flex align-items-center gap-2"
              href="{% url 'core:dm_thread' member.id %}"
              data-sidebar-search="{{ member.username|lower }}">
-            {% include "core/partials/user_avatar.html" with profile_user=member is_online=member.id in online_user_ids size=28 %}
+            {% include "core/partials/user_avatar.html" with profile_user=member size=28 %}
             <span class="text-truncate">{{ member.username }}</span>
           </a>
         {% empty %}

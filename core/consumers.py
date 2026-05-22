@@ -5,7 +5,12 @@ from django.core.exceptions import ValidationError
 
 from .message_payload import build_message_payload
 from .models import Channel, Message
-from .presence import is_user_online, user_connected, user_disconnected
+from .presence import (
+    SITE_PRESENCE_GROUP,
+    is_user_online,
+    user_connected,
+    user_disconnected,
+)
 from .services import user_has_server_access, user_is_blocked_on_server
 from .voice_presence import (
     voice_channel_name_for_user,
@@ -82,7 +87,7 @@ class ChatConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
             return
 
         self.group_name = f"chat_{self.channel_id}"
-        self.presence_group = f"server_presence_{self.server_id}"
+        self.presence_group = SITE_PRESENCE_GROUP
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.channel_layer.group_add(self.presence_group, self.channel_name)
         await self.accept()
@@ -195,7 +200,7 @@ class VoiceConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
 
         self.server_id = ch.server_id
         self.group_name = f"voice_{self.channel_id}"
-        self.presence_group = f"server_presence_{self.server_id}"
+        self.presence_group = SITE_PRESENCE_GROUP
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.channel_layer.group_add(self.presence_group, self.channel_name)
         await self.accept()
@@ -320,3 +325,36 @@ class VoiceConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
     def is_user_blocked(self) -> bool:
         ch = Channel.objects.select_related("server").get(pk=self.channel_id)
         return user_is_blocked_on_server(self.user, ch.server)
+
+
+class SitePresenceConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
+    """
+    Lekkie połączenie na każdej stronie (profil, DM, wyszukiwarka).
+    Utrzymuje status online bez otwartego czatu.
+    """
+
+    async def connect(self):
+        self.user = self.scope["user"]
+        if not self.user.is_authenticated:
+            await self.close(code=4001)
+            return
+
+        self.presence_group = SITE_PRESENCE_GROUP
+        await self.channel_layer.group_add(self.presence_group, self.channel_name)
+        await self.accept()
+
+        if await self._presence_connect():
+            await self._broadcast_presence(True)
+
+    async def disconnect(self, close_code):
+        if hasattr(self, "presence_group"):
+            if await self._presence_disconnect():
+                await self._broadcast_presence(False)
+            await self.channel_layer.group_discard(
+                self.presence_group,
+                self.channel_name,
+            )
+
+    async def receive_json(self, content, **kwargs):
+        if content.get("type") == "ping":
+            await self.send_json({"type": "pong"})

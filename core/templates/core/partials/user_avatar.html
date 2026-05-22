@@ -1,4 +1,4 @@
-{% load media_extras %}
+{% load media_extras presence_extras %}
 <div class="user-avatar-wrap position-relative d-inline-block" data-user-id="{{ profile_user.id }}">
   {% with av_url=profile_user.avatar|file_url %}
   {% if av_url %}
@@ -10,6 +10,6 @@
     </div>
   {% endif %}
   {% endwith %}
-  <span class="user-status-dot {% if is_online %}status-online{% else %}status-offline{% endif %}"
-        title="{% if is_online %}Online{% else %}Offline{% endif %}"></span>
+  <span class="user-status-dot {% if profile_user|user_online %}status-online{% else %}status-offline{% endif %}"
+        title="{% if profile_user|user_online %}Online{% else %}Offline{% endif %}"></span>
 </div>

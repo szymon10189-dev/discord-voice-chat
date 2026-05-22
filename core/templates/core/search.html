@@ -56,7 +56,7 @@
             {% for u in users %}
               <a class="list-group-item list-group-item-action bg-dark text-light border-secondary d-flex align-items-center gap-2"
                  href="{% url 'core:dm_thread' u.id %}">
-                {% include "core/partials/user_avatar.html" with profile_user=u is_online=u.id in online_user_ids size=32 %}
+                {% include "core/partials/user_avatar.html" with profile_user=u size=32 %}
                 <span>@{{ u.username }}</span>
               </a>
             {% endfor %}

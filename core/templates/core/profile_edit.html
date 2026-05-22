@@ -8,11 +8,11 @@
       <div class="card-header py-3">Twój profil</div>
       <div class="card-body p-4">
         <div class="text-center mb-3">
-          {% include "core/partials/user_avatar.html" with profile_user=user is_online=user|user_online size=96 %}
-          <p class="small text-secondary mt-2 mb-0">
+          {% include "core/partials/user_avatar.html" with profile_user=user size=96 %}
+          <p class="small text-secondary mt-2 mb-0" data-presence-user-id="{{ user.id }}">
             Status:
             <span class="user-status-inline {% if user|user_online %}status-online{% else %}status-offline{% endif %}"></span>
-            {% if user|user_online %}Online{% else %}Offline{% endif %}
+            <span class="presence-label-text">{% if user|user_online %}Online{% else %}Offline{% endif %}</span>
           </p>
         </div>
         {% if user.avatar and not user.avatar|file_url %}

@@ -35,7 +35,7 @@
         {% for m in messages %}
           <div class="d-flex mb-3 chat-message-row w-100 align-items-start" data-message-id="{{ m.id }}" data-author-id="{{ m.author_id }}">
             <div class="flex-shrink-0 me-3">
-              {% include "core/partials/user_avatar.html" with profile_user=m.author is_online=m.author_id in online_user_ids size=40 %}
+              {% include "core/partials/user_avatar.html" with profile_user=m.author size=40 %}
             </div>
             <div class="flex-grow-1 min-w-0 chat-message-body">
               <div class="d-flex align-items-baseline gap-2 flex-wrap">
@@ -256,15 +256,9 @@
   }
 
   function updateUserPresenceDot(userId, online) {
-    if (!scrollEl) return;
-    var wraps = document.querySelectorAll('.user-avatar-wrap[data-user-id="' + userId + '"]');
-    wraps.forEach(function (wrap) {
-      var dot = wrap.querySelector(".user-status-dot");
-      if (!dot) return;
-      dot.classList.toggle("status-online", !!online);
-      dot.classList.toggle("status-offline", !online);
-      dot.title = online ? "Online" : "Offline";
-    });
+    if (typeof window.updateUserPresenceDot === "function") {
+      window.updateUserPresenceDot(userId, online);
+    }
   }
 
   function buildAvatarColumn(m) {
