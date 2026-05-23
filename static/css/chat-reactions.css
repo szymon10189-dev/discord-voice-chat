@@ -45,23 +45,17 @@
 }
 
 .chat-reaction-quick-picker {
-  position: absolute;
-  bottom: calc(100% + 0.25rem);
-  left: 0;
-  z-index: 1200;
+  position: fixed;
+  z-index: 2000;
   display: flex;
   flex-wrap: wrap;
   gap: 0.2rem;
-  max-width: 14rem;
+  max-width: min(14rem, calc(100vw - 1rem));
   padding: 0.35rem;
   background: #2b2d31;
   border: 1px solid #3f4147;
   border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-.chat-reactions {
-  position: relative;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .chat-reaction-quick-item {

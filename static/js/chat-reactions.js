@@ -4,12 +4,56 @@
   var QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉", "✅", "❌", "⭐", "💯"];
 
   var activePicker = null;
+  var activePickerAnchor = null;
+  var pickerScrollEl = null;
+  var pickerOnScroll = null;
+  var pickerOnResize = null;
+
+  function removePickerListeners() {
+    if (pickerScrollEl && pickerOnScroll) {
+      pickerScrollEl.removeEventListener("scroll", pickerOnScroll);
+    }
+    if (pickerOnResize) {
+      window.removeEventListener("resize", pickerOnResize);
+    }
+    pickerScrollEl = null;
+    pickerOnScroll = null;
+    pickerOnResize = null;
+  }
+
+  function positionQuickPicker(anchorBtn, panel) {
+    var gap = 6;
+    var margin = 8;
+    panel.style.visibility = "hidden";
+    panel.style.display = "flex";
+    panel.style.top = "0";
+    panel.style.left = "0";
+
+    var anchorRect = anchorBtn.getBoundingClientRect();
+    var panelRect = panel.getBoundingClientRect();
+
+    var top = anchorRect.top - panelRect.height - gap;
+    var left = anchorRect.left;
+
+    if (top < margin) {
+      top = anchorRect.bottom + gap;
+    }
+
+    left = Math.max(margin, Math.min(left, window.innerWidth - panelRect.width - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - panelRect.height - margin));
+
+    panel.style.top = top + "px";
+    panel.style.left = left + "px";
+    panel.style.visibility = "";
+  }
 
   function closeQuickPicker() {
+    removePickerListeners();
     if (activePicker && activePicker.parentNode) {
       activePicker.parentNode.removeChild(activePicker);
     }
     activePicker = null;
+    activePickerAnchor = null;
   }
 
   function buildPill(messageId, reaction) {
@@ -70,10 +114,8 @@
     }
   }
 
-  function showQuickPicker(anchorBtn, messageId, onPick) {
+  function showQuickPicker(anchorBtn, messageId, onPick, scrollEl) {
     closeQuickPicker();
-    var bar = anchorBtn.closest(".chat-reactions");
-    if (!bar) return;
 
     var panel = document.createElement("div");
     panel.className = "chat-reaction-quick-picker";
@@ -94,8 +136,23 @@
       panel.appendChild(item);
     });
 
-    bar.appendChild(panel);
+    document.body.appendChild(panel);
+    positionQuickPicker(anchorBtn, panel);
     activePicker = panel;
+    activePickerAnchor = anchorBtn;
+
+    pickerOnScroll = function () {
+      if (activePicker && activePickerAnchor) {
+        positionQuickPicker(activePickerAnchor, activePicker);
+      }
+    };
+    pickerOnResize = pickerOnScroll;
+
+    if (scrollEl) {
+      pickerScrollEl = scrollEl;
+      scrollEl.addEventListener("scroll", pickerOnScroll, { passive: true });
+    }
+    window.addEventListener("resize", pickerOnResize);
   }
 
   function initChatReactions(options) {
@@ -154,11 +211,11 @@
         var row = addBtn.closest(".chat-message-row");
         var messageId = row && row.getAttribute("data-message-id");
         if (!messageId) return;
-        if (activePicker && addBtn.closest(".chat-reactions").contains(activePicker)) {
+        if (activePicker && activePickerAnchor === addBtn) {
           closeQuickPicker();
           return;
         }
-        showQuickPicker(addBtn, messageId, toggleReaction);
+        showQuickPicker(addBtn, messageId, toggleReaction, scrollEl);
       }
     });
 
